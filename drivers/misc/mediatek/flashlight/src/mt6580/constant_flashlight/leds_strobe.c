@@ -422,8 +422,6 @@ static void work_timeOutFunc(struct work_struct *data)
 	PK_DBG("ledTimeOut_callback\n");
 }
 
-
-
 enum hrtimer_restart ledTimeOutCallback(struct hrtimer *timer)
 {
 	schedule_work(&workTimeOut);
@@ -443,6 +441,7 @@ void timerInit(void)
 		g_timeOutTimer.function = ledTimeOutCallback;
 	}
 }
+
 
 
 static int constant_flashlight_ioctl(unsigned int cmd, unsigned long arg)
@@ -584,7 +583,7 @@ MUINT32 constantFlashlightInit(PFLASHLIGHT_FUNCTION_STRUCT *pfFunc)
 		*pfFunc = &constantFlashlightFunc;
 	return 0;
 }
-EXPORT_SYMBOL(constantFlashlightInit);
+
 
 
 /* LED flash control for high current capture mode*/

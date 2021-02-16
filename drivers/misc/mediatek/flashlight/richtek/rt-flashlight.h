@@ -1,17 +1,14 @@
 /*
- * Header of Flashlight Class Device Driver
+ *  Copyright (C) 2017 MediaTek Inc.
  *
- * Copyright (C) 2013 Richtek Technology Corp.
- * Patrick Chang <patrick_chang@richtek.com>
- *
- * This program is free software; you can redistribute it and/or modify
+ * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef LINUX_LEDS_FLASHLIGHT_H
@@ -40,6 +37,8 @@ enum flashlight_mode {
 
 struct flashlight_device;
 
+typedef int (*flashlight_charge_event_cb)(void *data, int remains);
+
 struct flashlight_ops {
 	int (*set_torch_brightness)(struct flashlight_device *, int);
 	int (*set_strobe_brightness)(struct flashlight_device *, int);
@@ -49,7 +48,7 @@ struct flashlight_ops {
 	int (*set_color_temperature)(struct flashlight_device *, int);
 	int (*list_color_temperature)(struct flashlight_device *, int);
 	int (*strobe_charge)(struct flashlight_device *,
-			int (*flashlight_charge_event_cb)(void *, int), void *, int);
+				flashlight_charge_event_cb, void *, int);
 	int (*strobe)(struct flashlight_device *);
 	int (*is_ready)(struct flashlight_device *);
 	int (*suspend)(struct flashlight_device *, pm_message_t);
@@ -136,7 +135,7 @@ extern int flashlight_is_ready(struct flashlight_device *flashlight_dev);
  * @start : 1 means start; 0 means stop
  */
 extern int flashlight_strobe_charge(struct flashlight_device *flashlight_dev,
-			int (*flashlight_charge_event_cb)(void *, int), void *data, int start);
+			flashlight_charge_event_cb cb, void *data, int start);
 
 #define to_flashlight_device(obj) \
 	container_of(obj, struct flashlight_device, dev)

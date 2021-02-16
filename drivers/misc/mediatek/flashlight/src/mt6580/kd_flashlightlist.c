@@ -49,7 +49,7 @@
 #include <linux/compat.h>
 #endif
 #include "kd_flashlight.h"
-#include <mach/mt_pbm.h>
+
 
 
 
@@ -131,7 +131,6 @@ int getSensorDevIndex(int sensorDev)
 		return 1;
 	else if (sensorDev == e_CAMERA_MAIN_2_SENSOR)
 		return 2;
-	/* else */
 	logI("sensorDev=%d is wrong", sensorDev);
 	return -1;
 }
@@ -275,6 +274,7 @@ static int decFlash(void)
 	int j;
 	int k;
 	int duty;
+
 	for (i = 0; i < e_Max_Sensor_Dev_Num; i++)
 		for (j = 0; j < e_Max_Strobe_Num_Per_Dev; j++)
 			for (k = 0; k < e_Max_Part_Num_Per_Dev; k++) {
@@ -291,30 +291,33 @@ static int decFlash(void)
 	return 0;
 }
 */
+/*
 static int closeFlash(void)
 {
-	int i;
+    int i;
 	int j;
 	int k;
-
-	logI("closeFlash ln=%d", __LINE__);
-	for (i = 0; i < e_Max_Sensor_Dev_Num; i++) {
-		/* logI("closeFlash ln=%d %d",__LINE__,i); */
-		for (j = 0; j < e_Max_Strobe_Num_Per_Dev; j++) {
-			/* logI("closeFlash ln=%d %d",__LINE__,j); */
-			for (k = 0; k < e_Max_Part_Num_Per_Dev; k++) {
-				/* logI("closeFlash ln=%d %d %d",__LINE__,k, (int)g_pFlashInitFunc[i][j][k]); */
-				if (g_pFlashInitFunc[i][j][k] != 0) {
-					logI("closeFlash i,j,k %d %d %d", i, j, k);
-					g_pFlashInitFunc[i][j][k]->flashlight_ioctl
-					    (FLASH_IOC_SET_ONOFF, 0);
-				}
+	logI("closeFlash ln=%d",__LINE__);
+	for(i=0;i<e_Max_Sensor_Dev_Num;i++)
+	{
+	    //logI("closeFlash ln=%d %d",__LINE__,i);
+	for(j=0;j<e_Max_Strobe_Num_Per_Dev;j++)
+	{
+	    //logI("closeFlash ln=%d %d",__LINE__,j);
+		for(k=0;k<e_Max_Part_Num_Per_Dev;k++)
+		{
+		    //logI("closeFlash ln=%d %d %d",__LINE__,k, (int)g_pFlashInitFunc[i][j][k]);
+			if(g_pFlashInitFunc[i][j][k]!=0)
+			{
+			    logI("closeFlash i,j,k %d %d %d", i, j, k);
+			g_pFlashInitFunc[i][j][k]->flashlight_ioctl(FLASH_IOC_SET_ONOFF, 0);
 			}
 		}
 	}
+    }
 	return 0;
 }
-
+*/
 /* @@{ */
 
 /*
@@ -327,7 +330,7 @@ static int closeFlash(void)
 
 /* /}@@ */
 static int gLowPowerVbat = LOW_BATTERY_LEVEL_0;
-
+/*
 static void Lbat_protection_powerlimit_flash(LOW_BATTERY_LEVEL level)
 {
 	logI("Lbat_protection_powerlimit_flash %d (%d %d %d %d)\n", level, LOW_BATTERY_LEVEL_0,
@@ -337,21 +340,23 @@ static void Lbat_protection_powerlimit_flash(LOW_BATTERY_LEVEL level)
 	if (level == LOW_BATTERY_LEVEL_0) {
 		gLowPowerVbat = LOW_BATTERY_LEVEL_0;
 	} else if (level == LOW_BATTERY_LEVEL_1) {
-		closeFlash();
+		decFlash();
 		gLowPowerVbat = LOW_BATTERY_LEVEL_1;
 
 	} else if (level == LOW_BATTERY_LEVEL_2) {
-		closeFlash();
+		decFlash();
 		gLowPowerVbat = LOW_BATTERY_LEVEL_2;
 	} else {
+*/
 		/* unlimit cpu and gpu */
+/*
 	}
 }
-
+*/
 
 
 static int gLowPowerPer = BATTERY_PERCENT_LEVEL_0;
-
+/*
 static void bat_per_protection_powerlimit_flashlight(BATTERY_PERCENT_LEVEL level)
 {
 	logI("bat_per_protection_powerlimit_flashlight %d (%d %d %d)\n", level,
@@ -361,15 +366,15 @@ static void bat_per_protection_powerlimit_flashlight(BATTERY_PERCENT_LEVEL level
 	if (level == BATTERY_PERCENT_LEVEL_0) {
 		gLowPowerPer = BATTERY_PERCENT_LEVEL_0;
 	} else if (level == BATTERY_PERCENT_LEVEL_1) {
-		closeFlash();
+		decFlash();
 		gLowPowerPer = BATTERY_PERCENT_LEVEL_1;
 	} else {
-
-		/*unlimit cpu and gpu*/
-
+*/
+		/* unlimit cpu and gpu */
+/*
 	}
 }
-
+*/
 
 /*
 static int gLowPowerOc=BATTERY_OC_LEVEL_0;
@@ -428,7 +433,7 @@ static long flashlight_ioctl_core(struct file *file, unsigned int cmd, unsigned 
 			int isLow = 0;
 
 			if (gLowPowerPer != BATTERY_PERCENT_LEVEL_0
-			|| gLowPowerVbat != LOW_BATTERY_LEVEL_0)
+			    || gLowPowerVbat != LOW_BATTERY_LEVEL_0)
 				isLow = 1;
 			logI("FLASH_IOC_IS_LOW_POWER %d %d %d", gLowPowerPer, gLowPowerVbat, isLow);
 			kdArg.arg = isLow;
@@ -468,20 +473,6 @@ static long flashlight_ioctl_core(struct file *file, unsigned int cmd, unsigned 
 				return -EFAULT;
 			}
 			logI("FLASH_IOC_GET_PART_ID line=%d partId=%d", __LINE__, partId);
-		}
-		break;
-	case FLASH_IOC_SET_ONOFF:
-		{
-			FLASHLIGHT_FUNCTION_STRUCT *pF;
-
-			pF = g_pFlashInitFunc[sensorDevIndex][strobeIndex][partIndex];
-			if (pF != 0) {
-				kicker_pbm_by_flash(kdArg.arg);
-				i4RetValue = pF->flashlight_ioctl(cmd, kdArg.arg);
-
-			} else {
-				logI("[FLASH_IOC_SET_ONOFF] function pointer is wrong -");
-			}
 		}
 		break;
 	case FLASH_IOC_UNINIT:
@@ -799,10 +790,10 @@ static int __init flashlight_init(void)
 		return ret;
 	}
 
-	register_low_battery_notify(&Lbat_protection_powerlimit_flash, LOW_BATTERY_PRIO_FLASHLIGHT);
-	register_battery_percent_notify(&bat_per_protection_powerlimit_flashlight,
-					BATTERY_PERCENT_PRIO_FLASHLIGHT);
+/* @@	register_low_battery_notify(&Lbat_protection_powerlimit_flash, LOW_BATTERY_PRIO_FLASHLIGHT); */
+/* @@	register_battery_percent_notify(&bat_per_protection_powerlimit_flashlight, BATTERY_PERCENT_PRIO_FLASHLIGHT); */
 /* @@    register_battery_oc_notify(&bat_oc_protection_powerlimit, BATTERY_OC_PRIO_FLASHLIGHT); */
+
 
 	logI("[flashlight_probe] done! ~");
 	return ret;

@@ -6,3 +6,4 @@ config RT_FLASHLIGHT
 	  This Framework is good for
 	  controling flashlight Leds.
 	  Say N to disable Richtek Flahslight Device Class
+
