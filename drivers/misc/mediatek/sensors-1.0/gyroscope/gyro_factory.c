@@ -14,6 +14,7 @@
 #define pr_fmt(fmt) "<GYRO_FAC> " fmt
 
 #include "inc/gyro_factory.h"
+#include "../sensor_cal/sensor_cal_file_io.h"
 
 struct gyro_factory_private {
 	uint32_t gain;
@@ -124,13 +125,46 @@ static long gyro_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 		return 0;
+	case GYROSCOPE_IOCTL_WRITE_CALI:
+		if (copy_from_user(&sensor_data, ptr, sizeof(sensor_data)))
+			return -EFAULT;
+		data_buf[0] = sensor_data.x;
+		data_buf[1] = sensor_data.y;
+		data_buf[2] = sensor_data.z;
+
+		err = sensor_calibration_save(ID_GYROSCOPE, data_buf);
+		if(err) {
+			pr_debug("GSENSOR_IOCTL_WRITE_CALI NULL\n");
+			return -EINVAL;
+		}
+
+		pr_notice("GYROSCOPE_IOCTL_WRITE_CALI: (%d, %d, %d)!\n",
+			 data_buf[0], data_buf[1], data_buf[2]);
+		if (gyro_factory.fops != NULL &&
+		    gyro_factory.fops->set_cali != NULL) {
+			err = gyro_factory.fops->set_cali(data_buf);
+			if (err < 0) {
+				pr_err("GYROSCOPE_IOCTL_WRITE_CALI FAIL!\n");
+				return -EINVAL;
+			}
+		} else {
+			pr_err("GYROSCOPE_IOCTL_WRITE_CALI NULL\n");
+			return -EINVAL;
+		}
+		return 0;
 	case GYROSCOPE_IOCTL_SET_CALI:
 		if (copy_from_user(&sensor_data, ptr, sizeof(sensor_data)))
 			return -EFAULT;
 		data_buf[0] = sensor_data.x;
 		data_buf[1] = sensor_data.y;
 		data_buf[2] = sensor_data.z;
-		pr_debug("GYROSCOPE_IOCTL_SET_CALI: (%d, %d, %d)!\n",
+		err = sensor_calibration_read(ID_GYROSCOPE, data_buf);
+		if(err) {
+			pr_notice("GSENSOR_IOCTL_SET_CALI NULL\n");
+			return -EINVAL;
+		}
+
+		pr_notice("GYROSCOPE_IOCTL_SET_CALI: (%d, %d, %d)!\n",
 			 data_buf[0], data_buf[1], data_buf[2]);
 		if (gyro_factory.fops != NULL &&
 		    gyro_factory.fops->set_cali != NULL) {
@@ -191,6 +225,20 @@ static long gyro_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 		return 0;
+	case GYROSCOPE_IOCTL_SELF_TEST:
+		if (gyro_factory.fops != NULL &&
+		    gyro_factory.fops->do_self_test != NULL) {
+			err = gyro_factory.fops->do_self_test();
+			if (err < 0) {
+				pr_err(
+					"GYROSCOPE_IOCTL_SELF_TEST FAIL!\n");
+				return -EINVAL;
+			}
+		} else {
+			pr_err("GYROSCOPE_IOCTL_SELF_TEST NULL\n");
+			return -EINVAL;
+		}
+		return 0;
 	default:
 		pr_err("unknown IOCTL: 0x%08x\n", cmd);
 		return -ENOIOCTLCMD;
@@ -220,6 +268,7 @@ static long compat_gyro_factory_unlocked_ioctl(struct file *filp,
 	case COMPAT_GYROSCOPE_IOCTL_CLR_CALI:
 	case COMPAT_GYROSCOPE_IOCTL_GET_CALI:
 	case COMPAT_GYROSCOPE_IOCTL_ENABLE_CALI:
+	case COMPAT_GYROSCOPE_IOCTL_SELF_TEST:
 		pr_debug(
 			"compat_ion_ioctl : GYROSCOPE_IOCTL_XXX command is 0x%x\n",
 			cmd);

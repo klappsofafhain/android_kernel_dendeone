@@ -13,7 +13,7 @@
 #define pr_fmt(fmt) "<ACCEL_FAC> " fmt
 
 #include "inc/accel_factory.h"
-
+#include "../sensor_cal/sensor_cal_file_io.h"
 struct accel_factory_private {
 	uint32_t gain;
 	uint32_t sensitivity;
@@ -122,7 +122,23 @@ static long acc_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 		data_buf[0] = sensor_data.x;
 		data_buf[1] = sensor_data.y;
 		data_buf[2] = sensor_data.z;
-		pr_debug("GSENSOR_IOCTL_SET_CALI: (%d, %d, %d)!\n", data_buf[0],
+		if(data_buf[0] == 0 && data_buf[1] == 0 && data_buf[2] == 0) {
+			err = sensor_calibration_read(ID_ACCELEROMETER, data_buf);
+			if(err) {
+				pr_debug("GSENSOR_IOCTL_SET_CALI NULL\n");
+				return -EINVAL;
+			}
+
+		}
+		else {
+			err = sensor_calibration_save(ID_ACCELEROMETER, data_buf);
+			if(err) {
+				pr_debug("GSENSOR_IOCTL_SET_CALI NULL\n");
+				return -EINVAL;
+			}
+
+		}
+		printk("GSENSOR_IOCTL_SET_CALI: (%d, %d, %d)!\n", data_buf[0],
 			data_buf[1], data_buf[2]);
 		if (accel_factory.fops != NULL &&
 		    accel_factory.fops->set_cali != NULL) {
@@ -182,6 +198,19 @@ static long acc_factory_unlocked_ioctl(struct file *file, unsigned int cmd,
 			return -EINVAL;
 		}
 		return 0;
+	case GSENSOR_IOCTL_SELF_TEST:
+		if (accel_factory.fops != NULL &&
+		    accel_factory.fops->do_self_test != NULL) {
+			err = accel_factory.fops->do_self_test();
+			if (err < 0) {
+				pr_err("GSENSOR_IOCTL_SELF_TEST FAIL!\n");
+				return -EINVAL;
+			}
+		} else {
+			pr_err("GSENSOR_IOCTL_SELF_TEST NULL\n");
+			return -EINVAL;
+		}
+		return 0;
 	default:
 		pr_err("unknown IOCTL: 0x%08x\n", cmd);
 		return -ENOIOCTLCMD;
@@ -211,6 +240,7 @@ static long compat_acc_factory_unlocked_ioctl(struct file *filp,
 	case COMPAT_GSENSOR_IOCTL_CLR_CALI:
 	case COMPAT_GSENSOR_IOCTL_GET_CALI:
 	case COMPAT_GSENSOR_IOCTL_ENABLE_CALI:
+	case COMPAT_GSENSOR_IOCTL_SELF_TEST:
 		pr_debug("compat_ioctl : GSENSOR_IOCTL command is 0x%x\n", cmd);
 		return filp->f_op->unlocked_ioctl(
 			filp, cmd, (unsigned long)compat_ptr(arg));

@@ -129,11 +129,9 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 	ppg_control_timer[ch] += ppg_sample_length;
 
 #if defined(LOG_PPG_CONTROL_ENABLE)
-	pr_notice("%s, timer%d=%d, state=%d, led=%d, idx=%d, fs=%d, l=%d\n",
-		"MT6381_AGC start", ch,
-		ppg_control_timer[ch], ppg_ctrl_cur_state[ch],
-		ppg_control_led_current[ch],
-		ppg_ctrl_buf_idx[ch], fs_input, ppg_sample_length);
+	pr_notice("MT6381_AGC start, timer%d=%d, state=%d, led=%d, idx=%d, fs=%d, l=%d\n", ch,
+	       ppg_control_timer[ch], ppg_ctrl_cur_state[ch], ppg_control_led_current[ch],
+	       ppg_ctrl_buf_idx[ch], fs_input, ppg_sample_length);
 #endif				/* #if defined(LOG_PPG_CONTROL_ENABLE) */
 
 	/* down sample step size calc. */
@@ -157,16 +155,12 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 
 		/* Downsampling. PPG DC estimation */
 		if (ppg_ctrl_in_count[ch] == 0) {
-			/* current input is LED-AMB,
-			 *value will become LED phase
-			 */
+			/* current input is LED-AMB, value will become LED phase */
 			value = input[i] + input_amb[i];
 
 #if defined(LOG_PPG_CONTROL_ENABLE)
-			pr_notice("%s, PPG%d = %d, LED = %d, AMB = %d, idx = %d\n",
-				"MT6381_AGC input", ch,
-				input[i], value, input_amb[i],
-				ppg_ctrl_buf_idx[ch]);
+			pr_notice("MT6381_AGC input, PPG%d = %d, LED = %d, AMB = %d, idx = %d\n", ch,
+			       input[i], value, input_amb[i], ppg_ctrl_buf_idx[ch]);
 #endif
 
 			/* buffer update */
@@ -179,8 +173,7 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 				ppg_ctrl_cnt_neg_edge[ch]++;
 			/* init filter setting */
 			if (ppg_control_init_flag[ch] == 0) {
-				ppg_control_hpf[ch] =
-					value << PPG_CONTROL_HPF_ORDER;
+				ppg_control_hpf[ch] = value << PPG_CONTROL_HPF_ORDER;
 				ppg_control_init_flag[ch] = 1;
 			}
 			/* buffer pointer update */
@@ -200,8 +193,7 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 			ppg_ctrl_cur_state[ch] = PPG_CONTROL_STATE_SAT_P;
 			ppg_control_adjust_flag[ch] = 1;
 
-		} else if (ppg_ctrl_cnt_neg_edge[ch] >
-			PPG_SATURATE_HANDLE_COUNT) {
+		} else if (ppg_ctrl_cnt_neg_edge[ch] > PPG_SATURATE_HANDLE_COUNT) {
 			ppg_ctrl_cur_state[ch] = PPG_CONTROL_STATE_SAT_N;
 			ppg_control_adjust_flag[ch] = 1;
 
@@ -218,12 +210,10 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 				/* find ac max */
 				ppg_control_hpf[ch] +=
 				    ((ppg_ctrl_buf[ch][j] * 4) -
-				     ppg_control_hpf[ch]) >>
-				     PPG_CONTROL_HPF_ORDER;
+				     ppg_control_hpf[ch]) >> PPG_CONTROL_HPF_ORDER;
 				value_ac =
 				    ppg_ctrl_buf[ch][j] -
-				    (ppg_control_hpf[ch] >>
-				    PPG_CONTROL_HPF_ORDER);
+				    (ppg_control_hpf[ch] >> PPG_CONTROL_HPF_ORDER);
 				if (value_ac > window_ac_max)
 					window_ac_max = value_ac;
 				if (value_ac < window_ac_min)
@@ -231,20 +221,17 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 			}	/* end AC update */
 			value_ac = window_ac_max - window_ac_min;
 
-			/* if (window_dc_max < PPG_DC_ENLARGE_BOUND &&
-			 *	value_ac < PPG_AC_TARGET) {
+			/* if (window_dc_max < PPG_DC_ENLARGE_BOUND && value_ac < PPG_AC_TARGET) {
 			 *	ppg_ctrl_cur_state[ch] = PPG_CONTROL_STATE_INC;
 			 *	ppg_control_adjust_flag[ch] = 1;
-			 * }	else if(window_dc_min >
-			 *	(PPG_DC_POS_EDGE - (PPG_DC_POS_EDGE>>3))) {
+			 * }	else if(window_dc_min > (PPG_DC_POS_EDGE - (PPG_DC_POS_EDGE>>3))) {
 			 *	 ppg_ctrl_cur_state[ch] = PPG_CONTROL_STATE_DEC;
 			 *	 ppg_control_adjust_flag[ch] = 1;
 			 *	 }
 			 */
 		}
 		/* reset */
-		if (ppg_control_adjust_flag[ch] == 1 ||
-			ppg_ctrl_buf_idx[ch] >= PPG_CTRL_FS_OPERATE) {
+		if (ppg_control_adjust_flag[ch] == 1 || ppg_ctrl_buf_idx[ch] >= PPG_CTRL_FS_OPERATE) {
 			ppg_ctrl_buf_idx[ch] = 0;
 			ppg_ctrl_cnt_pos_edge[ch] = 0;
 			ppg_ctrl_cnt_neg_edge[ch] = 0;
@@ -264,18 +251,16 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 
 		if (ppg_ctrl_cur_state[ch] == PPG_CONTROL_STATE_SAT_P) {
 			/* LED decrease */
-			if (ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_SAT_N ||
-				ppg_ctrl_pre_state[ch] ==
-				PPG_CONTROL_STATE_INC) {
+			if (ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_SAT_N
+			    || ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_INC) {
 				led_step = -PPG_LED_STEP_FINE;
 			} else {
 				led_step = -PPG_LED_STEP_COARSE;
 			}
 		} else if (ppg_ctrl_cur_state[ch] == PPG_CONTROL_STATE_SAT_N) {
 			/* LED increase */
-			if (ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_SAT_P ||
-				ppg_ctrl_pre_state[ch] ==
-				PPG_CONTROL_STATE_DEC) {
+			if (ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_SAT_P
+			    || ppg_ctrl_pre_state[ch] == PPG_CONTROL_STATE_DEC) {
 				led_step = PPG_LED_STEP_FINE;
 			} else {
 				led_step = PPG_LED_STEP_COARSE;
@@ -301,18 +286,16 @@ INT32 ppg_control_process(struct ppg_control_t *ppg_control_input)
 			ppg_control_led_current[ch] = PPG_MIN_LED_CURRENT;
 
 #if defined(LOG_PPG_CONTROL_ENABLE)
-		pr_notice("MT6381_AGC write, state%d = %d->%d, led = %d, step = %d\n",
-			ch, ppg_ctrl_pre_state[ch], ppg_ctrl_cur_state[ch],
-			ppg_control_led_current[ch], led_step);
+		pr_notice("MT6381_AGC write, state%d = %d->%d, led = %d, step = %d\n", ch,
+		       ppg_ctrl_pre_state[ch], ppg_ctrl_cur_state[ch], ppg_control_led_current[ch],
+		       led_step);
 #endif
 
 #if defined(PPG_CTRL_DRIVER_ON)
 		/*if(ch==0) { //PPG1
-		 * vsm_driver_set_led_current(VSM_LED_1,
-		 *	VSM_SIGNAL_PPG1, ppg_control_led_current[ch]);
+		 * vsm_driver_set_led_current(VSM_LED_1, VSM_SIGNAL_PPG1, ppg_control_led_current[ch]);
 		 * } else {
-		 * vsm_driver_set_led_current(VSM_LED_2,
-		 *	VSM_SIGNAL_PPG2, ppg_control_led_current[ch]);
+		 * vsm_driver_set_led_current(VSM_LED_2, VSM_SIGNAL_PPG2, ppg_control_led_current[ch]);
 		 * }
 		 */
 		ppg_ctrl_set_driver_ch(ch);
@@ -333,8 +316,7 @@ void ppg_ctrl_set_driver_ch(INT32 ch)
 	struct bus_data_t ppg_reg_info;
 
 	/* write register: LED current (MT6381: 0x332C) */
-	ppg_reg_value = ppg_control_led_current[0] +
-		(ppg_control_led_current[1] << 8);
+	ppg_reg_value = ppg_control_led_current[0] + (ppg_control_led_current[1] << 8);
 	ppg_reg_info.addr = 0x33;
 	ppg_reg_info.reg = 0x2C;
 	ppg_reg_info.data_buf = (uint8_t *) &ppg_reg_value;

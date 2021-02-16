@@ -39,15 +39,18 @@ typedef enum {
 struct maghub_ipi_data {
 	int		direction;
 	int32_t dynamic_cali[MAGHUB_AXES_NUM];
+	int32_t parameter_cali[6];
 	atomic_t	trace;
 	atomic_t	suspend;
 	atomic_t	scp_init_done;
 	atomic_t first_ready_after_boot;
+	atomic_t selftest_status;
 	struct work_struct init_done_work;
 	struct data_unit_t m_data_t;
 	bool factory_enable;
 	bool android_enable;
 	struct mag_dev_info_t mag_dev_info;
+	struct completion selftest_done;
 };
 static int maghub_m_setPowerMode(bool enable)
 {
@@ -148,7 +151,7 @@ static ssize_t store_trace_value(struct device_driver *ddri,
 		return 0;
 	}
 
-	if (sscanf(buf, "0x%x", &trace) != 1) {
+	if (sscanf(buf, "%d", &trace) != 1) {
 		pr_err("invalid content: '%s',length = %zu\n", buf, count);
 		return count;
 	}
@@ -260,7 +263,7 @@ static int maghub_delete_attr(struct device_driver *driver)
 
 static void scp_init_work_done(struct work_struct *work)
 {
-	int32_t cfg_data[3] = {0};
+	int32_t cfg_data[9] = {0};
 	struct maghub_ipi_data *obj = mag_ipi_data;
 	int err = 0;
 	struct mag_libinfo_t mag_libinfo;
@@ -291,6 +294,13 @@ static void scp_init_work_done(struct work_struct *work)
 	cfg_data[0] = obj->dynamic_cali[0];
 	cfg_data[1] = obj->dynamic_cali[1];
 	cfg_data[2] = obj->dynamic_cali[2];
+
+	cfg_data[3] = obj->parameter_cali[0];
+	cfg_data[4] = obj->parameter_cali[1];
+	cfg_data[5] = obj->parameter_cali[2];
+	cfg_data[6] = obj->parameter_cali[3];
+	cfg_data[7] = obj->parameter_cali[4];
+	cfg_data[8] = obj->parameter_cali[5];
 	spin_unlock(&calibration_lock);
 	err = sensor_cfg_to_hub(ID_MAGNETIC,
 		(uint8_t *)cfg_data, sizeof(cfg_data));
@@ -303,18 +313,17 @@ static int mag_recv_data(struct data_unit_t *event, void *reserved)
 	struct mag_data data;
 	struct maghub_ipi_data *obj = mag_ipi_data;
 
-		data.x = event->magnetic_t.x;
-		data.y = event->magnetic_t.y;
-		data.z = event->magnetic_t.z;
-		data.status = event->magnetic_t.status;
-		data.timestamp = (int64_t)event->time_stamp;
-		data.reserved[0] = event->reserve[0];
+	data.x = event->magnetic_t.x;
+	data.y = event->magnetic_t.y;
+	data.z = event->magnetic_t.z;
+	data.status = event->magnetic_t.status;
+	data.timestamp = (int64_t)event->time_stamp;
+	data.reserved[0] = event->reserve[0];
 
 	if (event->flush_action == DATA_ACTION &&
 		READ_ONCE(obj->android_enable) == true)
 		err = mag_data_report(&data);
-	else if (event->flush_action == FLUSH_ACTION &&
-		READ_ONCE(obj->android_enable) == true)
+	else if (event->flush_action == FLUSH_ACTION)
 		err = mag_flush_report();
 	else if (event->flush_action == BIAS_ACTION) {
 		data.x = event->magnetic_t.x_bias;
@@ -325,6 +334,19 @@ static int mag_recv_data(struct data_unit_t *event, void *reserved)
 		obj->dynamic_cali[MAGHUB_AXIS_X] = event->magnetic_t.x_bias;
 		obj->dynamic_cali[MAGHUB_AXIS_Y] = event->magnetic_t.y_bias;
 		obj->dynamic_cali[MAGHUB_AXIS_Z] = event->magnetic_t.z_bias;
+		spin_unlock(&calibration_lock);
+	} else if (event->flush_action == TEST_ACTION) {
+		atomic_set(&obj->selftest_status, event->magnetic_t.status);
+		complete(&obj->selftest_done);
+	} else if (event->flush_action == CALI_ACTION) {
+		err = mag_cali_report(event->data);
+		spin_lock(&calibration_lock);
+		obj->parameter_cali[0] = event->data[0];
+		obj->parameter_cali[1] = event->data[1];
+		obj->parameter_cali[2] = event->data[2];
+		obj->parameter_cali[3] = event->data[3];
+		obj->parameter_cali[4] = event->data[4];
+		obj->parameter_cali[5] = event->data[5];
 		spin_unlock(&calibration_lock);
 	}
 	return err;
@@ -390,8 +412,14 @@ static int maghub_set_cali(uint8_t *data, uint8_t count)
 	obj->dynamic_cali[0] = buf[0];
 	obj->dynamic_cali[1] = buf[1];
 	obj->dynamic_cali[2] = buf[2];
-	spin_unlock(&calibration_lock);
 
+	obj->parameter_cali[0] = buf[3];
+	obj->parameter_cali[1] = buf[4];
+	obj->parameter_cali[2] = buf[5];
+	obj->parameter_cali[3] = buf[6];
+	obj->parameter_cali[4] = buf[7];
+	obj->parameter_cali[5] = buf[8];
+	spin_unlock(&calibration_lock);
 	return sensor_cfg_to_hub(ID_MAGNETIC, data, count);
 }
 
@@ -489,7 +517,19 @@ static int maghub_factory_get_cali(int32_t data[3])
 }
 static int maghub_factory_do_self_test(void)
 {
-	return 0;
+	int ret = 0;
+	struct maghub_ipi_data *obj = mag_ipi_data;
+
+	ret = sensor_selftest_to_hub(ID_MAGNETIC);
+	if (ret < 0)
+		return -1;
+
+	init_completion(&obj->selftest_done);
+	ret = wait_for_completion_timeout(&obj->selftest_done,
+					  msecs_to_jiffies(3000));
+	if (!ret)
+		return -1;
+	return atomic_read(&obj->selftest_status);
 }
 
 static struct mag_factory_fops maghub_factory_fops = {
@@ -526,8 +566,10 @@ static int maghub_probe(struct platform_device *pdev)
 	}
 	mag_ipi_data = data;
 	atomic_set(&data->trace, 0);
+	atomic_set(&data->selftest_status, 0);
 	WRITE_ONCE(data->factory_enable, false);
 	WRITE_ONCE(data->android_enable, false);
+	init_completion(&data->selftest_done);
 
 	platform_set_drvdata(pdev, data);
 

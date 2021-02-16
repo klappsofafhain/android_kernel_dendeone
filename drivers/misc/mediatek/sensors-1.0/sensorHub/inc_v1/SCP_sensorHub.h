@@ -1,17 +1,12 @@
 /* SCP sensor hub driver
  *
- * Copyright (C) 2016 MediaTek Inc.
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+ * This software program is licensed subject to the GNU General Public License
+ * (GPL).Version 2,June 1991, available at http://www.fsf.org/copyleft/gpl.html
 
+ * (C) Copyright 2011 Bosch Sensortec GmbH
+ * All Rights Reserved
+ */
 
 #ifndef SCP_SENSOR_HUB_H
 #define SCP_SENSOR_HUB_H
@@ -87,25 +82,61 @@ struct SensorState {
 #define    SCP_BATCH_TIMEOUT		3
 #define	   SCP_DIRECT_PUSH          4
 
+
+struct SCP_sensorData {
+	uint8_t dataLength;
+	uint8_t sensorType;
+	uint8_t reserve[2];
+	uint32_t timeStampH;
+	uint32_t timeStampL;
+	int16_t data[8];
+};
 typedef struct {
 	union {
+		int32_t v[3];
 		struct {
 			int32_t x;
 			int32_t y;
 			int32_t z;
-			int32_t x_bias;
-			int32_t y_bias;
-			int32_t z_bias;
 		};
 		struct {
 			int32_t azimuth;
 			int32_t pitch;
 			int32_t roll;
-			int32_t scalar;
 		};
 	};
-	uint32_t status;
+	union {
+		int32_t scalar;
+		union {
+			int16_t bias[3];
+			struct {
+				int16_t x_bias;
+				int16_t y_bias;
+				int16_t z_bias;
+			};
+		};
+	};
+	uint16_t status;
 } sensor_vec_t;
+
+typedef struct {
+	union {
+		int32_t uncali[3];
+		struct {
+			int32_t x_uncali;
+			int32_t y_uncali;
+			int32_t z_uncali;
+		};
+	};
+	union {
+		int32_t bias[3];
+		struct {
+			int32_t x_bias;
+			int32_t y_bias;
+			int32_t z_bias;
+		};
+	};
+} uncalibrated_event_t;
 
 typedef struct {
 	int32_t bpm;
@@ -220,7 +251,8 @@ struct data_unit_t {
 	uint8_t sensor_type;
 	uint8_t flush_action;
 	uint8_t reserve[2];
-	uint64_t time_stamp;
+	uint64_t time_stamp;	/* ms on CM4 time kick */
+	int64_t time_stamp_gpt;	/* ms for sensor GPT AP SCP sync time */
 	union {
 		sensor_vec_t accelerometer_t;
 		sensor_vec_t gyroscope_t;
@@ -256,7 +288,9 @@ struct data_unit_t {
 } __packed;
 
 struct sensorFIFO {
-	uint32_t rp;	/* use int for store DRAM FIFO LSB 32bit read pointer */
+/* volatile struct SCP_sensorData * volatile rp; */
+/* volatile struct SCP_sensorData * volatile wp; */
+	uint32_t rp;			/* use int for store DRAM FIFO LSB 32bit read pointer */
 	uint32_t wp;
 	uint32_t FIFOSize;
 	uint32_t reserve;
@@ -356,7 +390,6 @@ typedef enum {
 	CUST_ACTION_SHOW_ALSLV,
 	CUST_ACTION_SHOW_ALSVAL,
 	CUST_ACTION_SET_FACTORY,
-	CUST_ACTION_GET_SENSOR_INFO,
 } CUST_ACTION;
 
 typedef struct {
@@ -417,24 +450,6 @@ typedef struct {
 	};
 } SCP_SENSOR_HUB_GET_RAW_DATA;
 
-struct mag_dev_info_t {
-	char libname[16];
-	int32_t layout;
-	int32_t deviceid;
-};
-
-struct sensorInfo_t {
-	union {
-		char name[16];
-		struct mag_dev_info_t mag_dev_info;
-	};
-};
-
-struct scp_sensor_hub_get_sensor_info {
-	CUST_ACTION action;
-	struct sensorInfo_t sensorInfo;
-};
-
 enum {
 	USE_OUT_FACTORY_MODE = 0,
 	USE_IN_FACTORY_MODE
@@ -445,7 +460,7 @@ typedef struct {
 	uint8_t action;
 	uint8_t reserve[2];
 	union {
-		uint32_t custData[11];
+		uint32_t custData[10];
 		SCP_SENSOR_HUB_CUST cust;
 		SCP_SENSOR_HUB_SET_CUST setCust;
 		SCP_SENSOR_HUB_SET_CALI setCali;
@@ -458,7 +473,6 @@ typedef struct {
 		SCP_SENSOR_HUB_SHOW_ALSLV showAlslv;
 		SCP_SENSOR_HUB_SHOW_ALSVAL showAlsval;
 		SCP_SENSOR_HUB_SET_FACTORY	setFactory;
-		struct scp_sensor_hub_get_sensor_info getInfo;
 	};
 } SCP_SENSOR_HUB_SET_CUST_REQ;
 
@@ -468,9 +482,8 @@ typedef struct {
 	uint8_t errCode;
 	uint8_t reserve[1];
 	union {
-		uint32_t custData[11];
+		uint32_t custData[9];
 		SCP_SENSOR_HUB_GET_RAW_DATA getRawData;
-		struct scp_sensor_hub_get_sensor_info getInfo;
 	};
 } SCP_SENSOR_HUB_SET_CUST_RSP;
 
@@ -509,21 +522,15 @@ typedef union {
 	SCP_SENSOR_HUB_NOTIFY_RSP notify_rsp;
 } SCP_SENSOR_HUB_DATA, *SCP_SENSOR_HUB_DATA_P;
 
-typedef int (*SCP_sensorHub_handler)(struct data_unit_t *event,
-	void *reserved);
+typedef int (*SCP_sensorHub_handler)(struct data_unit_t *event, void *reserved);
 
-int scp_sensorHub_req_send(SCP_SENSOR_HUB_DATA_P data,
-	uint *len, unsigned int wait);
-int scp_sensorHub_data_registration(uint8_t sensor,
-	SCP_sensorHub_handler handler);
+int scp_sensorHub_req_send(SCP_SENSOR_HUB_DATA_P data, uint *len, unsigned int wait);
+int scp_sensorHub_data_registration(uint8_t sensor, SCP_sensorHub_handler handler);
 int sensor_enable_to_hub(uint8_t sensorType, int enabledisable);
 int sensor_set_delay_to_hub(uint8_t sensorType, unsigned int delayms);
-int sensor_get_data_from_hub(uint8_t sensorType,
-	struct data_unit_t *data);
-int sensor_set_cmd_to_hub(uint8_t sensorType,
-	CUST_ACTION action, void *data);
-int sensor_batch_to_hub(uint8_t sensorType,
-	int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
+int sensor_get_data_from_hub(uint8_t sensorType, struct data_unit_t *data);
+int sensor_set_cmd_to_hub(uint8_t sensorType, CUST_ACTION action, void *data);
+int sensor_batch_to_hub(uint8_t sensorType, int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 int sensor_flush_to_hub(uint8_t sensorType);
 int sensor_cfg_to_hub(uint8_t sensorType, uint8_t *data, uint8_t count);
 int sensor_calibration_to_hub(uint8_t sensorType);

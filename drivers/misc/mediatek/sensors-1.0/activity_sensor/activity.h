@@ -16,7 +16,7 @@
 #define __ACTIVITY_H__
 
 
-//#include <linux/pm_wakeup.h>
+#include <linux/wakelock.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
@@ -39,6 +39,11 @@
 #include "sensor_attr.h"
 #include "sensor_event.h"
 
+#define ACT_TAG					"<ACTIVITY> "
+#define ACT_FUN(f)				pr_debug(ACT_TAG"%s\n", __func__)
+#define ACT_PR_ERR(fmt, args...)	pr_err(ACT_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
+#define ACT_LOG(fmt, args...)	pr_debug(ACT_TAG fmt, ##args)
+#define ACT_VER(fmt, args...)   pr_debug(ACT_TAG"%s: "fmt, __func__, ##args)	/* ((void)0) */
 
 #define OP_ACT_DELAY	0X01
 #define	OP_ACT_ENABLE	0X02
@@ -58,7 +63,7 @@
 #define EVENT_TYPE_ACT_RUNNING			ABS_HAT1Y
 #define EVENT_TYPE_ACT_CLIMBING			ABS_HAT2X
 #define EVENT_TYPE_ACT_SITTING			ABS_HAT2Y
-#define EVENT_TYPE_ACT_STATUS		        ABS_WHEEL
+#define EVENT_TYPE_ACT_STATUS		    ABS_WHEEL
 #define EVENT_TYPE_ACT_TIMESTAMP_HI		REL_HWHEEL
 #define EVENT_TYPE_ACT_TIMESTAMP_LO		REL_DIAL
 
@@ -73,10 +78,9 @@
 
 struct act_control_path {
 	int (*open_report_data)(int open);	/* open data rerport to HAL */
-	int (*enable_nodata)(int en);
+	int (*enable_nodata)(int en);	/* only enable not report event to HAL */
 	int (*set_delay)(u64 delay);
-	int (*batch)(int flag, int64_t samplingPeriodNs,
-		int64_t maxBatchReportLatencyNs);
+	int (*batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*flush)(void);/* open data rerport to HAL */
 	bool is_report_input_direct;
 	bool is_support_batch;
@@ -96,8 +100,8 @@ struct act_init_info {
 struct act_drv_obj {
 	void *self;
 	int polling;
-	int (*act_operate)(void *self, uint32_t command, void *buff_in,
-		int size_in, void *buff_out, int size_out, int *actualout);
+	int (*act_operate)(void *self, uint32_t command, void *buff_in, int size_in,
+			    void *buff_out, int size_out, int *actualout);
 };
 
 struct act_context {
@@ -106,7 +110,7 @@ struct act_context {
 	struct work_struct report;
 	struct mutex act_op_mutex;
 	atomic_t delay;		/*polling period for reporting input event */
-	atomic_t wake;        /*user-space request to wake-up, used with stop */
+	atomic_t wake;		/*user-space request to wake-up, used with stop */
 	struct timer_list timer;	/* polling timer */
 	atomic_t trace;
 
@@ -114,7 +118,7 @@ struct act_context {
 	struct hwm_sensor_data drv_data;
 	struct act_control_path act_ctl;
 	struct act_data_path act_data;
-	bool is_active_nodata;
+	bool is_active_nodata;	/* Active, but HAL don't need data sensor. such as orientation need */
 	bool is_active_data;	/* Active and HAL need data . */
 	bool is_first_data_after_enable;
 	bool is_polling_run;

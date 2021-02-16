@@ -40,6 +40,8 @@
 
 #include "accel_factory.h"
 
+#define ACC_LOG(fmt, args...) pr_debug(ACC_TAG fmt, ##args)
+
 #define OP_ACC_DELAY 0X01
 #define OP_ACC_ENABLE 0X02
 #define OP_ACC_GET_DATA 0X04

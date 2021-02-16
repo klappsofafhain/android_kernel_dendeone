@@ -1,32 +1,26 @@
 /*
- * Copyright (C) 2011-2014 MediaTek Inc.
- *
- * This program is free software: you can redistribute it and/or modify it under
- * the terms of the
- * GNU General Public License version 2 as published by the Free Software
- * Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY;
- * without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
- * PARTICULAR PURPOSE.
- * See the GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program.
- * If not, see <http://www.gnu.org/licenses/>.
- */
+* Copyright (C) 2011-2014 MediaTek Inc.
+*
+* This program is free software: you can redistribute it and/or modify it under the terms of the
+* GNU General Public License version 2 as published by the Free Software Foundation.
+*
+* This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+* without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* See the GNU General Public License for more details.
+*
+* You should have received a copy of the GNU General Public License along with this program.
+* If not, see <http://www.gnu.org/licenses/>.
+*/
 
-#define pr_fmt(fmt) "<HWMSEN> " fmt
-
-#include "sensor_attr.h"
-#include "sensor_event.h"
-#include <linux/device.h>
+#include <linux/module.h>
 #include <linux/fs.h>
-#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
-#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/device.h>
+#include "sensor_attr.h"
+#include "sensor_event.h"
+
 
 static int sensor_attr_major = -1;
 static struct class *sensor_attr_class;
@@ -77,8 +71,8 @@ fail:
 }
 
 static const struct file_operations sensor_attr_fops = {
-	.owner = THIS_MODULE,
-	.open = sensor_attr_open,
+	.owner		= THIS_MODULE,
+	.open		= sensor_attr_open,
 };
 
 int sensor_attr_register(struct sensor_attr_t *misc)
@@ -103,7 +97,7 @@ int sensor_attr_register(struct sensor_attr_t *misc)
 	mutex_unlock(&sensor_attr_mtx);
 	err = sensor_event_register(misc->minor);
 	return err;
-out:
+ out:
 	mutex_unlock(&sensor_attr_mtx);
 	return err;
 }
@@ -114,8 +108,7 @@ int sensor_attr_deregister(struct sensor_attr_t *misc)
 
 	mutex_lock(&sensor_attr_mtx);
 	list_del(&misc->list);
-	device_destroy(sensor_attr_class,
-		       MKDEV(sensor_attr_major, misc->minor));
+	device_destroy(sensor_attr_class, MKDEV(sensor_attr_major, misc->minor));
 	mutex_unlock(&sensor_attr_mtx);
 	sensor_event_deregister(misc->minor);
 	return 0;
@@ -149,3 +142,4 @@ fail_printk:
 	return err;
 }
 subsys_initcall(sensor_attr_init);
+

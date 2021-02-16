@@ -5,5 +5,4 @@ obj-y   +=  gyroscope.o gyro_factory.o
 
 
 obj-$(CONFIG_MTK_GYROHUB)      +=  gyrohub/
-obj-$(CONFIG_MTK_ITG1010)   +=  ITG1010/
-obj-$(CONFIG_MTK_BMG160)   +=  bmg160/
+obj-$(CONFIG_MTK_BMI160GY_NEW) +=  bmi160gy-new/

@@ -1,14 +1,12 @@
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
  * History: V1.0 --- [2013.03.14]Driver creation
  *          V1.1 --- [2013.07.03]Re-write I2C function to fix the bug that
@@ -16,9 +14,6 @@
  *          V1.2 --- [2013.07.04]Add self test function.
  *          V1.3 --- [2013.07.04]Support new chip id 0x57 and 0x58.
  */
-
-#define pr_fmt(fmt) "[barometer] " fmt
-
 #include "barohub.h"
 #include <barometer.h>
 #include <hwmsensor.h>
@@ -44,6 +39,12 @@ struct barohub_ipi_data {
 	bool android_enable;
 };
 
+#define BAR_TAG                  "[barometer] "
+#define BAR_FUN(f)               pr_debug(BAR_TAG"%s\n", __func__)
+#define BAR_PR_ERR(fmt, args...) \
+	pr_err(BAR_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
+#define BAR_LOG(fmt, args...)    pr_debug(BAR_TAG fmt, ##args)
+
 static struct barohub_ipi_data *obj_ipi_data;
 static int barohub_local_init(void);
 static int barohub_local_remove(void);
@@ -60,20 +61,21 @@ static int barohub_set_powermode(bool enable)
 
 	err = sensor_enable_to_hub(ID_PRESSURE, enable);
 	if (err < 0)
-		pr_err("SCP_sensorHub_req_send fail!\n");
+		BAR_PR_ERR("SCP_sensorHub_req_send fail!\n");
 
 	return err;
 }
 
 /*
- *get compensated pressure
- *unit: hectopascal(hPa)
- */
+*get compensated pressure
+*unit: hectopascal(hPa)
+*/
 static int barohub_get_pressure(char *buf, int bufsize)
 {
 	struct barohub_ipi_data *obj = obj_ipi_data;
 	struct data_unit_t data;
 	uint64_t time_stamp = 0;
+	uint64_t time_stamp_gpt = 0;
 	int pressure;
 	int err = 0;
 
@@ -84,15 +86,20 @@ static int barohub_get_pressure(char *buf, int bufsize)
 		return -1;
 	err = sensor_get_data_from_hub(ID_PRESSURE, &data);
 	if (err < 0) {
-		pr_err("sensor_get_data_from_hub fail!\n");
+		BAR_PR_ERR("sensor_get_data_from_hub fail!\n");
 		return err;
 	}
 
 	time_stamp		= data.time_stamp;
+	time_stamp_gpt	= data.time_stamp_gpt;
 	pressure		= data.pressure_t.pressure;
+#if 0
+	BAR_LOG("recv ipi: timestamp: %lld, timestamp_gpt: %lld, pressure: %d!\n",
+	time_stamp, time_stamp_gpt, pressure);
+#endif
 	sprintf(buf, "%08x", pressure);
 	if (atomic_read(&obj->trace) & BAR_TRC_IOCTL)
-		pr_debug("compensated pressure value: %s\n", buf);
+		BAR_LOG("compensated pressure value: %s\n", buf);
 
 	return err;
 }
@@ -103,12 +110,12 @@ static ssize_t show_sensordata_value(struct device_driver *ddri, char *buf)
 
 	err = barohub_set_powermode(true);
 	if (err < 0) {
-		pr_err("barohub_set_powermode fail!!\n");
+		BAR_PR_ERR("barohub_set_powermode fail!!\n");
 		return 0;
 	}
 	err = barohub_get_pressure(strbuf, BAROHUB_BUFSIZE);
 	if (err < 0) {
-		pr_err("barohub_set_powermode fail!!\n");
+		BAR_PR_ERR("barohub_set_powermode fail!!\n");
 		return 0;
 	}
 	return sprintf(buf, "%s\n", strbuf);
@@ -119,7 +126,7 @@ static ssize_t show_trace_value(struct device_driver *ddri, char *buf)
 	struct barohub_ipi_data *obj = obj_ipi_data;
 
 	if (obj == NULL) {
-		pr_err("pointer is null\n");
+		BAR_PR_ERR("pointer is null\n");
 		return 0;
 	}
 
@@ -127,33 +134,31 @@ static ssize_t show_trace_value(struct device_driver *ddri, char *buf)
 	return res;
 }
 
-static ssize_t store_trace_value(struct device_driver *ddri,
-			const char *buf, size_t count)
+static ssize_t store_trace_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	struct barohub_ipi_data *obj = obj_ipi_data;
 	int trace = 0, res = 0;
 
 	if (obj == NULL) {
-		pr_err("obj is null\n");
+		BAR_PR_ERR("obj is null\n");
 		return 0;
 	}
 	res = kstrtoint(buf, 10, &trace);
-	if (res != 0) {
-		pr_err("invalid content: '%s', length = %d\n",
-							buf, (int)count);
-		return count;
-	}
-	atomic_set(&obj->trace, trace);
-	res = sensor_set_cmd_to_hub(ID_PRESSURE, CUST_ACTION_SET_TRACE, &trace);
-	if (res < 0) {
-		pr_err("sensor_set_cmd_to_hub fail,(ID: %d),(action: %d)\n",
-			ID_PRESSURE, CUST_ACTION_SET_TRACE);
-		return 0;
+	if (res == 0) {
+		atomic_set(&obj->trace, trace);
+		res = sensor_set_cmd_to_hub(ID_PRESSURE, CUST_ACTION_SET_TRACE, &trace);
+		if (res < 0) {
+			BAR_PR_ERR("sensor_set_cmd_to_hub fail, (ID: %d),(action: %d)\n",
+				ID_PRESSURE, CUST_ACTION_SET_TRACE);
+			return 0;
+		}
+	} else {
+		BAR_PR_ERR("invalid content: '%s', length = %d\n", buf, (int)count);
 	}
 	return count;
 }
-static DRIVER_ATTR(sensordata, 0444, show_sensordata_value, NULL);
-static DRIVER_ATTR(trace, 0644, show_trace_value, store_trace_value);
+static DRIVER_ATTR(sensordata, S_IRUGO, show_sensordata_value, NULL);
+static DRIVER_ATTR(trace, S_IWUSR | S_IRUGO, show_trace_value, store_trace_value);
 
 static struct driver_attribute *barohub_attr_list[] = {
 	&driver_attr_sensordata,	/* dump sensor data */
@@ -171,8 +176,7 @@ static int barohub_create_attr(struct device_driver *driver)
 	for (idx = 0; idx < num; idx++) {
 		err = driver_create_file(driver, barohub_attr_list[idx]);
 		if (err) {
-			pr_err("driver_create_file (%s) = %d\n",
-				barohub_attr_list[idx]->attr.name, err);
+			BAR_PR_ERR("driver_create_file (%s) = %d\n", barohub_attr_list[idx]->attr.name, err);
 			break;
 		}
 	}
@@ -205,11 +209,10 @@ static int baro_recv_data(struct data_unit_t *event, void *reserved)
 		err = baro_flush_report();
 	else if (event->flush_action == DATA_ACTION)
 		err = baro_data_report(event->pressure_t.pressure, 2,
-			(int64_t)event->time_stamp);
+			(int64_t)(event->time_stamp + event->time_stamp_gpt));
 	return err;
 }
-static int barohub_factory_enable_sensor(bool enabledisable,
-				int64_t sample_periods_ms)
+static int barohub_factory_enable_sensor(bool enabledisable, int64_t sample_periods_ms)
 {
 	int err = 0;
 	struct barohub_ipi_data *obj = obj_ipi_data;
@@ -222,13 +225,13 @@ static int barohub_factory_enable_sensor(bool enabledisable,
 	if (enabledisable == true) {
 		err = sensor_set_delay_to_hub(ID_PRESSURE, sample_periods_ms);
 		if (err) {
-			pr_err("sensor_set_delay_to_hub failed!\n");
+			BAR_PR_ERR("sensor_set_delay_to_hub failed!\n");
 			return -1;
 		}
 	}
 	err = sensor_enable_to_hub(ID_PRESSURE, enabledisable);
 	if (err) {
-		pr_err("sensor_enable_to_hub failed!\n");
+		BAR_PR_ERR("sensor_enable_to_hub failed!\n");
 		return -1;
 	}
 	return 0;
@@ -240,13 +243,10 @@ static int barohub_factory_get_data(int32_t *data)
 
 	err = barohub_get_pressure(strbuf, BAROHUB_BUFSIZE);
 	if (err < 0) {
-		pr_err("barohub_get_pressure fail\n");
+		BAR_PR_ERR("barohub_get_pressure fail\n");
 		return -1;
 	}
 	err = kstrtoint(strbuf, 16, data);
-	if (err != 0)
-		pr_debug("kstrtoint fail\n");
-
 	return 0;
 }
 static int barohub_factory_get_raw_data(int32_t *data)
@@ -314,10 +314,10 @@ static int barohub_enable_nodata(int en)
 
 	res = barohub_set_powermode(power);
 	if (res < 0) {
-		pr_debug("barohub_set_powermode fail\n");
+		BAR_LOG("barohub_set_powermode fail\n");
 		return res;
 	}
-	pr_debug("barohub_set_powermode OK!\n");
+	BAR_LOG("barohub_set_powermode OK!\n");
 	return res;
 }
 
@@ -331,7 +331,7 @@ static int barohub_set_delay(u64 ns)
 	delayms = (unsigned int)ns / 1000 / 1000;
 	err = sensor_set_delay_to_hub(ID_PRESSURE, delayms);
 	if (err < 0) {
-		pr_err("als_set_delay fail!\n");
+		BAR_PR_ERR("als_set_delay fail!\n");
 		return err;
 	}
 	return 0;
@@ -341,14 +341,12 @@ static int barohub_set_delay(u64 ns)
 	return 0;
 #endif
 }
-static int barohub_batch(int flag,
-	int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
+static int barohub_batch(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
 {
 #if defined CONFIG_MTK_SCP_SENSORHUB_V1
 	barohub_set_delay(samplingPeriodNs);
 #endif
-	return sensor_batch_to_hub(ID_PRESSURE,
-		flag, samplingPeriodNs, maxBatchReportLatencyNs);
+	return sensor_batch_to_hub(ID_PRESSURE, flag, samplingPeriodNs, maxBatchReportLatencyNs);
 }
 
 static int barohub_flush(void)
@@ -357,17 +355,14 @@ static int barohub_flush(void)
 }
 static int barohub_get_data(int *value, int *status)
 {
-	char buff[BAROHUB_BUFSIZE] = {0};
+	char buff[BAROHUB_BUFSIZE];
 	int err = 0;
 
 	err = barohub_get_pressure(buff, BAROHUB_BUFSIZE);
-
 	if (err) {
-		pr_err("get compensated pressure value failed, err = %d\n",
-			err);
+		BAR_PR_ERR("get compensated pressure value failed, err = %d\n", err);
 		return -1;
 	}
-
 	err = kstrtoint(buff, 16, value);
 	if (err == 0)
 		*status = SENSOR_STATUS_ACCURACY_MEDIUM;
@@ -381,10 +376,10 @@ static int scp_ready_event(uint8_t event, void *ptr)
 	switch (event) {
 	case SENSOR_POWER_UP:
 	    atomic_set(&obj->scp_init_done, 1);
-		break;
+	    break;
 	case SENSOR_POWER_DOWN:
 	    atomic_set(&obj->scp_init_done, 0);
-		break;
+	    break;
 	}
 	return 0;
 }
@@ -400,10 +395,8 @@ static int barohub_probe(struct platform_device *pdev)
 	struct baro_control_path ctl = { 0 };
 	struct baro_data_path data = { 0 };
 	int err = 0;
-	struct platform_driver *paddr =
-				barohub_init_info.platform_diver_addr;
 
-	pr_debug("%s\n", __func__);
+	BAR_FUN();
 
 	obj = kzalloc(sizeof(*obj), GFP_KERNEL);
 	if (!obj) {
@@ -423,20 +416,19 @@ static int barohub_probe(struct platform_device *pdev)
 	scp_power_monitor_register(&scp_ready_notifier);
 	err = scp_sensorHub_data_registration(ID_PRESSURE, baro_recv_data);
 	if (err < 0) {
-		pr_err("scp_sensorHub_data_registration failed\n");
+		BAR_PR_ERR("scp_sensorHub_data_registration failed\n");
 		goto exit_kfree;
 	}
 	err = baro_factory_device_register(&barohub_factory_device);
 	if (err) {
-		pr_err("baro_factory_device_register failed, err = %d\n",
-			err);
+		BAR_PR_ERR("baro_factory_device_register failed, err = %d\n", err);
 		goto exit_kfree;
 	}
 
 	ctl.is_use_common_factory = false;
-	err = barohub_create_attr(&paddr->driver);
+	err = barohub_create_attr(&(barohub_init_info.platform_diver_addr->driver));
 	if (err) {
-		pr_err("create attribute failed, err = %d\n", err);
+		BAR_PR_ERR("create attribute failed, err = %d\n", err);
 		goto exit_create_attr_failed;
 	}
 
@@ -455,7 +447,7 @@ static int barohub_probe(struct platform_device *pdev)
 #endif
 	err = baro_register_control_path(&ctl);
 	if (err) {
-		pr_err("register baro control path err\n");
+		BAR_PR_ERR("register baro control path err\n");
 		goto exit_create_attr_failed;
 	}
 
@@ -463,12 +455,12 @@ static int barohub_probe(struct platform_device *pdev)
 	data.vender_div = 100;
 	err = baro_register_data_path(&data);
 	if (err) {
-		pr_err("baro_register_data_path failed, err = %d\n", err);
+		BAR_PR_ERR("baro_register_data_path failed, err = %d\n", err);
 		goto exit_create_attr_failed;
 	}
 
 	barohub_init_flag = 0;
-	pr_debug("%s: OK\n", __func__);
+	BAR_LOG("%s: OK\n", __func__);
 	return 0;
 
 
@@ -478,7 +470,7 @@ exit_kfree:
 	kfree(obj);
 	obj_ipi_data = NULL;
 exit:
-	pr_err("err = %d\n", err);
+	BAR_PR_ERR("err = %d\n", err);
 	barohub_init_flag = -1;
 	return err;
 }
@@ -486,12 +478,10 @@ exit:
 static int barohub_remove(struct platform_device *pdev)
 {
 	int err = 0;
-	struct platform_driver *paddr =
-				barohub_init_info.platform_diver_addr;
 
-	err = barohub_delete_attr(&paddr->driver);
+	err = barohub_delete_attr(&(barohub_init_info.platform_diver_addr->driver));
 	if (err)
-		pr_err("barohub_delete_attr failed, err = %d\n", err);
+		BAR_PR_ERR("barohub_delete_attr failed, err = %d\n", err);
 
 	baro_factory_device_deregister(&barohub_factory_device);
 
@@ -526,7 +516,7 @@ static struct platform_driver barohub_driver = {
 
 static int barohub_local_remove(void)
 {
-	pr_debug("%s\n", __func__);
+	BAR_FUN();
 	platform_driver_unregister(&barohub_driver);
 	return 0;
 }
@@ -534,7 +524,7 @@ static int barohub_local_remove(void)
 static int barohub_local_init(void)
 {
 	if (platform_driver_register(&barohub_driver)) {
-		pr_err("add driver error\n");
+		BAR_PR_ERR("add driver error\n");
 		return -1;
 	}
 	if (-1 == barohub_init_flag)
@@ -544,9 +534,9 @@ static int barohub_local_init(void)
 
 static int __init barohub_init(void)
 {
-	pr_debug("%s\n", __func__);
+	BAR_FUN();
 	if (platform_device_register(&barohub_device)) {
-		pr_err("baro platform device error\n");
+		BAR_PR_ERR("baro platform device error\n");
 		return -1;
 	}
 	baro_driver_add(&barohub_init_info);
@@ -555,7 +545,7 @@ static int __init barohub_init(void)
 
 static void __exit barohub_exit(void)
 {
-	pr_debug("%s\n", __func__);
+	BAR_FUN();
 	platform_driver_unregister(&barohub_driver);
 }
 

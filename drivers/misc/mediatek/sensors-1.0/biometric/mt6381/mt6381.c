@@ -1,14 +1,15 @@
 /*
- * Copyright (C) 2016 MediaTek Inc.
+ * Author: yucong xiong <yucong.xion@mediatek.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  */
 
 #include <linux/of.h>
@@ -25,7 +26,7 @@
 #include <linux/gpio.h>
 #include <linux/of_platform.h>
 #include <mt-plat/aee.h>
-//#include <mt-plat/mtk_gpio_core.h>
+#include <mt-plat/mtk_gpio_core.h>
 #include "ppg_control.h"
 #include <linux/ctype.h>
 /*----------------------------------------------------------------------------*/
@@ -35,8 +36,7 @@
 #define DBG_SRAM            0
 
 #define MT6381_DEV_NAME        "MT6381_BIOMETRIC"
-static const struct i2c_device_id mt6381_i2c_id[] = {
-	{MT6381_DEV_NAME, 0}, {} };
+static const struct i2c_device_id mt6381_i2c_id[] = { {MT6381_DEV_NAME, 0}, {} };
 
 #ifdef CONFIG_OF
 static const struct of_device_id biometric_of_match[] = {
@@ -69,6 +69,18 @@ static const struct of_device_id biometric_of_match[] = {
 
 #define SRAM_COUNTER_RESET_MASK     0x20000000
 #define SRAM_COUNTER_OFFSET         29
+
+#ifdef MTK_SENSOR_BIO_CUSTOMER_GOMTEL
+#define GPIO_MT2511_PPG_VDRV_EN     HAL_GPIO_11
+#define GPIO_MT2511_32K             HAL_GPIO_13
+#define GPIO_MT2511_RST_PORT_PIN    HAL_GPIO_14
+#define GPIO_MT2511_AFE_PWD_PIN     HAL_GPIO_15
+#else
+#define GPIO_MT2511_32K             HAL_GPIO_14
+#define GPIO_MT2511_AFE_PWD_PIN     HAL_GPIO_24
+#define GPIO_MT2511_RST_PORT_PIN    HAL_GPIO_29
+#endif
+
 
 #define UPDATE_COMMAND_ADDR     0x2328
 #define SEC_UPDATE_COMMAND_ADDR 0x2728
@@ -165,6 +177,19 @@ static struct sensor_info test_info[NUM_OF_TYPE];
 static struct task_struct *bio_tsk[4] = { 0 };
 static DEFINE_MUTEX(bio_data_collection_mutex);
 
+/* Assign default capabilities setting */
+static int64_t getCurNS(void)
+{
+	int64_t ns;
+	struct timespec time;
+
+	time.tv_sec = time.tv_nsec = 0;
+	get_monotonic_boottime(&time);
+	ns = time.tv_sec * 1000000000LL + time.tv_nsec;
+
+	return ns;
+}
+
 u64 pre_ppg1_timestamp;
 u64 pre_ppg2_timestamp;
 u64 pre_ekg_timestamp;
@@ -180,9 +205,7 @@ struct i2c_msg ekg_msg[VSM_SRAM_LEN * 2];
 struct i2c_msg ppg1_msg[VSM_SRAM_LEN * 2];
 struct i2c_msg ppg2_msg[VSM_SRAM_LEN * 2];
 struct i2c_msg bisi_msg[VSM_SRAM_LEN * 2];
-char mt6381_sram_addr[4] = {
-	SRAM_EKG_ADDR, SRAM_PPG1_ADDR,
-	SRAM_PPG2_ADDR, SRAM_BISI_ADDR };
+char mt6381_sram_addr[4] = { SRAM_EKG_ADDR, SRAM_PPG1_ADDR, SRAM_PPG2_ADDR, SRAM_BISI_ADDR };
 
 /* used to store the data from i2c */
 u32 ekg_buf[VSM_SRAM_LEN], sram1_buf[VSM_SRAM_LEN], sram2_buf[VSM_SRAM_LEN];
@@ -206,7 +229,7 @@ enum vsm_signal_t current_signal;
 struct mutex op_lock;
 struct signal_data_t VSM_SIGNAL_MODIFY_array[50];
 struct signal_data_t VSM_SIGNAL_NEW_INIT_array[50];
-int mod_ary_len; /* modify array length */
+int modify_array_len;
 int new_init_array_len;
 u32 set_AFE_TCTRL_CON2, set_AFE_TCTRL_CON3;
 u32 AFE_TCTRL_CON2, AFE_TCTRL_CON3;
@@ -217,7 +240,7 @@ struct pinctrl_state *bio_pins_reset_high, *bio_pins_reset_low;
 struct pinctrl_state *bio_pins_pwd_high, *bio_pins_pwd_low;
 
 static int64_t enable_time;
-static int64_t pre_t[VSM_SRAM_PPG2+1];
+static int64_t previous_timestamp[VSM_SRAM_PPG2+1];
 static int64_t numOfData[3] = {0};
 static int numOfEKGDataNeedToDrop;
 static bool data_dropped;
@@ -256,24 +279,16 @@ static bool offline_mode_en;
 static char offline_mode_file_name[MAX_FILE_LENGTH];
 struct offline_mode_info *olm_info_p;
 
-static enum vsm_status_t
-vsm_driver_write_signal(struct signal_data_t *reg_addr,
-			 int32_t len,
-			 uint32_t *enable_data);
-static enum vsm_status_t vsm_driver_set_led(enum vsm_signal_t signal,
-					     bool enable);
+static enum vsm_status_t vsm_driver_write_signal(struct signal_data_t *reg_addr, int32_t len,
+					  uint32_t *enable_data);
+static enum vsm_status_t vsm_driver_set_led(enum vsm_signal_t signal, bool enable);
 static int MT6381_WriteCalibration(struct biometric_cali *cali);
 static struct file *bio_file_open(const char *path, int flags, int rights);
-static int bio_file_write(struct file *file,
-			   unsigned long long offset,
-			   unsigned char *data,
-			   unsigned int size);
+static int bio_file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size);
 static enum vsm_status_t vsm_driver_set_signal(enum vsm_signal_t signal);
 static enum vsm_status_t vsm_driver_disable_signal(enum vsm_signal_t signal);
-static enum vsm_status_t
-vsm_driver_read_sram(enum vsm_sram_type_t sram_type,
-		      uint32_t *data_buf, uint32_t *amb_buf,
-		      u32 *len);
+static enum vsm_status_t vsm_driver_read_sram(enum vsm_sram_type_t sram_type, uint32_t *data_buf, uint32_t *amb_buf,
+				       u32 *len);
 static int mt6381_local_init(void);
 static int mt6381_local_remove(void);
 static struct biometric_init_info mt6381_init_info = {
@@ -335,8 +350,7 @@ int mt6381_i2c_write_read(u8 addr, u8 reg, u8 *buf, u16 length)
 	msg[1].buf = buf;
 	res = i2c_transfer(mt6381_i2c_client->adapter, msg, ARRAY_SIZE(msg));
 	if (res < 0) {
-		pr_err("mt6381 i2c read failed. addr:%x, reg:%x, errno:%d\n",
-			addr, reg, res);
+		BIOMETRIC_PR_ERR("mt6381 i2c read failed. addr:%x, reg:%x, errno:%d\n", addr, reg, res);
 		return res;
 	}
 	return VSM_STATUS_OK;
@@ -407,11 +421,12 @@ static int bio_thread(void *arg)
 			data.data_buf = (uint8_t *) &read_counter2;
 			data.length = sizeof(read_counter2);
 			vsm_driver_read_register(&data);
+			/* vsm_driver_get_read_counter(sram_type, &read_counter2); */
 			do {
 				read_counter1 = read_counter2;
+				/* vsm_driver_get_read_counter(sram_type, &read_counter2); */
 				vsm_driver_read_register(&data);
-			} while ((read_counter1 & 0x1ff0000) !=
-				(read_counter2 & 0x1ff0000));
+			} while ((read_counter1 & 0x1ff0000) != (read_counter2 & 0x1ff0000));
 
 			/* write counter */
 			data.addr = s_info->write_counter >> 8;
@@ -419,11 +434,12 @@ static int bio_thread(void *arg)
 			data.data_buf = (uint8_t *) &write_counter2;
 			data.length = sizeof(write_counter2);
 			vsm_driver_read_register(&data);
+			/* vsm_driver_write_counter(sram_type, &write_counter2); */
 			do {
 				write_counter1 = write_counter2;
+				/* vsm_driver_write_counter(sram_type, &write_counter2); */
 				vsm_driver_read_register(&data);
-			} while ((write_counter1 & 0x1ff0000) !=
-				(write_counter2 & 0x1ff0000));
+			} while ((write_counter1 & 0x1ff0000) != (write_counter2 & 0x1ff0000));
 			/* mt2511_read(s_info->read_counter, buf); */
 			/* rc = ((*(int *)buf) & 0x1ff0000) >> 16; */
 			rc = (read_counter2 & 0x1ff0000) >> 16;
@@ -436,17 +452,14 @@ static int bio_thread(void *arg)
 			data.data_buf = (uint8_t *)buf;
 			data.length = sizeof(buf);
 			if (atomic_read(&bio_trace) != 0)
-				pr_debug("rc = %d, wc = %d\n", rc, wc);
+				BIOMETRIC_LOG("rc = %d, wc = %d\n", rc, wc);
 			while (rc != wc && s_info->numOfData) {
 				vsm_driver_read_register(&data);
 				if (atomic_read(&bio_trace) != 0)
-					pr_debug("%d, %d, %x, %x, %lld\n",
-						rc, wc, *(int *)buf,
-						s_info->upsram_rd_data,
-						sched_clock());
+					BIOMETRIC_LOG("%d, %d, %x, %x, %lld\n", rc, wc, *(int *)buf,
+						s_info->upsram_rd_data, sched_clock());
 				len = sprintf(str_buf, "%x\n", *(int *)buf);
-				size = bio_file_write(s_info->filp,
-					0, str_buf, len);
+				size = bio_file_write(s_info->filp, 0, str_buf, len);
 				rc = (rc + 1) % 384;
 				s_info->numOfData--;
 			}
@@ -462,20 +475,18 @@ static int bio_thread(void *arg)
 				data.data_buf = (uint8_t *) &read_counter2;
 				data.length = sizeof(read_counter2);
 				vsm_driver_read_register(&data);
+				/* vsm_driver_get_read_counter(sram_type, &read_counter2); */
 				do {
 					read_counter1 = read_counter2;
+					/* vsm_driver_get_read_counter(sram_type, &read_counter2); */
 					vsm_driver_read_register(&data);
-				} while ((read_counter1 & 0x1ff0000) !=
-					(read_counter2 & 0x1ff0000));
+				} while ((read_counter1 & 0x1ff0000) != (read_counter2 & 0x1ff0000));
 				/* mt2511_read(s_info->read_counter, buf); */
 				/* rc = ((*(int *)buf) & 0x1ff0000) >> 16; */
 				rc = (read_counter2 & 0x1ff0000) >> 16;
 				if (rc != wc) {
-					len = sprintf(str_buf,
-						"Unexpected rc = %d, wr = %d\n",
-						rc, wc);
-					size = bio_file_write(s_info->filp,
-						0, str_buf, len);
+					len = sprintf(str_buf, "Unexpected rc = %d, wr = %d\n", rc, wc);
+					size = bio_file_write(s_info->filp, 0, str_buf, len);
 				}
 			}
 		}
@@ -507,44 +518,30 @@ static int bio_thread_stress(void *arg)
 		mutex_lock(&bio_data_collection_mutex);
 		if (stress_test != 0) {
 			if (ekg_filp == NULL || ppg_filp == NULL) {
-				ekg_filp = bio_file_open("/data/bio/ekg_stress",
-					O_CREAT | O_WRONLY | O_TRUNC, 0644);
+				ekg_filp = bio_file_open("/data/bio/ekg_stress", O_CREAT | O_WRONLY | O_TRUNC, 0644);
 				if (ekg_filp == NULL) {
-					pr_err("open %s fail\n",
-						"/data/bio/ekg_stress");
+					BIOMETRIC_PR_ERR("open %s fail\n", "/data/bio/ekg_stress");
 					continue;
 				}
-				ppg_filp = bio_file_open("/data/bio/ppg_stress",
-					O_CREAT | O_WRONLY | O_TRUNC, 0644);
+				ppg_filp = bio_file_open("/data/bio/ppg_stress", O_CREAT | O_WRONLY | O_TRUNC, 0644);
 				if (ekg_filp == NULL) {
-					pr_err("open %s fail\n",
-						"/data/bio/ppg_stress");
+					BIOMETRIC_PR_ERR("open %s fail\n", "/data/bio/ppg_stress");
 					continue;
 				}
 			}
-			raw_data = kzalloc(sizeof(int) * VSM_SRAM_LEN,
-				GFP_KERNEL);
-			vsm_driver_read_sram(VSM_SRAM_EKG,
-				raw_data, NULL, &length);
+			raw_data = kzalloc(sizeof(int) * VSM_SRAM_LEN, GFP_KERNEL);
+			vsm_driver_read_sram(VSM_SRAM_EKG, raw_data, NULL, &length);
 			for (i = 0; i < length; i++) {
 				len = sprintf(str_buf, "%d\n",
-					raw_data[i] >= 0x400000 ?
-					raw_data[i] - 0x800000 : raw_data[i]);
-				size = bio_file_write(ekg_filp,
-					0, str_buf, len);
+					raw_data[i] >= 0x400000 ? raw_data[i] - 0x800000 : raw_data[i]);
+				size = bio_file_write(ekg_filp, 0, str_buf, len);
 			}
-			vsm_driver_read_sram(VSM_SRAM_PPG2,
-				raw_data, NULL, &length);
+			vsm_driver_read_sram(VSM_SRAM_PPG2, raw_data, NULL, &length);
 			for (i = 0; i < length; i += 2) {
 				len = sprintf(str_buf, "%d, %d\n",
-					raw_data[i] >= 0x400000 ?
-						raw_data[i] - 0x800000 :
-						raw_data[i],
-					raw_data[i + 1] >= 0x400000 ?
-						raw_data[i + 1] - 0x800000 :
-						raw_data[i + 1]);
-				size = bio_file_write(ppg_filp,
-					0, str_buf, len);
+					raw_data[i] >= 0x400000 ? raw_data[i] - 0x800000 : raw_data[i],
+					raw_data[i + 1] >= 0x400000 ? raw_data[i + 1] - 0x800000 : raw_data[i + 1]);
+				size = bio_file_write(ppg_filp, 0, str_buf, len);
 			}
 		} else {
 			if (ekg_filp != NULL) {
@@ -592,12 +589,9 @@ static void bio_test_init(void)
 		test_info[PPG2].numOfData = 0;
 		test_info[PPG2].enBit = 0x144;
 
-		bio_tsk[0] = kthread_create(bio_thread,
-			(void *)&test_info[EKG], "EKG");
-		bio_tsk[1] = kthread_create(bio_thread,
-			(void *)&test_info[PPG1], "PPG1");
-		bio_tsk[2] = kthread_create(bio_thread,
-			(void *)&test_info[PPG2], "PPG2");
+		bio_tsk[0] = kthread_create(bio_thread, (void *)&test_info[EKG], "EKG");
+		bio_tsk[1] = kthread_create(bio_thread, (void *)&test_info[PPG1], "PPG1");
+		bio_tsk[2] = kthread_create(bio_thread, (void *)&test_info[PPG2], "PPG2");
 		wake_up_process(bio_tsk[0]);
 		wake_up_process(bio_tsk[1]);
 		wake_up_process(bio_tsk[2]);
@@ -611,8 +605,7 @@ static void bio_stress_test_init(void)
 	static bool init_done;
 
 	if (init_done == false) {
-		bio_tsk[3] = kthread_create(
-			bio_thread_stress, NULL, "BIO_STRESS");
+		bio_tsk[3] = kthread_create(bio_thread_stress, NULL, "BIO_STRESS");
 		wake_up_process(bio_tsk[3]);
 
 		init_done = true;
@@ -638,9 +631,7 @@ static struct file *bio_file_open(const char *path, int flags, int rights)
 	return filp;
 }
 
-static int
-bio_file_read_line(struct file *file, unsigned long long offset,
-		    unsigned char *data, unsigned int size)
+static int bio_file_read_line(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
 {
 	mm_segment_t oldfs;
 	int ret;
@@ -662,9 +653,7 @@ bio_file_read_line(struct file *file, unsigned long long offset,
 	return ret;
 }
 
-static int
-bio_file_write(struct file *file, unsigned long long offset,
-		unsigned char *data, unsigned int size)
+static int bio_file_write(struct file *file, unsigned long long offset, unsigned char *data, unsigned int size)
 {
 	mm_segment_t oldfs;
 	int ret;
@@ -685,7 +674,7 @@ static void insert_modify_setting(int addr, int value)
 {
 	int i;
 
-	for (i = 0; i < mod_ary_len; i++) {
+	for (i = 0; i < modify_array_len; i++) {
 		if (VSM_SIGNAL_MODIFY_array[i].addr == addr) {
 			VSM_SIGNAL_MODIFY_array[i].value = value;
 			return;
@@ -693,11 +682,11 @@ static void insert_modify_setting(int addr, int value)
 	}
 
 	if (i == sizeof(VSM_SIGNAL_MODIFY_array)) {
-		pr_err("modify array full\n");
+		BIOMETRIC_PR_ERR("modify array full\n");
 	} else {
 		VSM_SIGNAL_MODIFY_array[i].addr = addr;
 		VSM_SIGNAL_MODIFY_array[i].value = value;
-		mod_ary_len++;
+		modify_array_len++;
 	}
 }
 
@@ -705,15 +694,11 @@ static void remove_modify_setting(int addr, int value)
 {
 	int i;
 
-	for (i = 0; i < mod_ary_len; i++) {
+	for (i = 0; i < modify_array_len; i++) {
 		if (VSM_SIGNAL_MODIFY_array[i].addr == addr) {
-			VSM_SIGNAL_MODIFY_array[i].addr =
-				VSM_SIGNAL_MODIFY_array[
-					mod_ary_len - 1].addr;
-			VSM_SIGNAL_MODIFY_array[i].value =
-				VSM_SIGNAL_MODIFY_array[
-					mod_ary_len - 1].value;
-			mod_ary_len--;
+			VSM_SIGNAL_MODIFY_array[i].addr = VSM_SIGNAL_MODIFY_array[modify_array_len - 1].addr;
+			VSM_SIGNAL_MODIFY_array[i].value = VSM_SIGNAL_MODIFY_array[modify_array_len - 1].value;
+			modify_array_len--;
 			return;
 		}
 	}
@@ -721,40 +706,32 @@ static void remove_modify_setting(int addr, int value)
 
 static void clear_modify_setting(void)
 {
-	mod_ary_len = 0;
+	modify_array_len = 0;
 }
 
 static void update_new_init_setting(void)
 {
 	int i, j;
 
-	if (mod_ary_len == 0) {
-		new_init_array_len = 0;
-		return;
-	}
+	if (modify_array_len != 0) {
+		memcpy(VSM_SIGNAL_NEW_INIT_array, VSM_SIGNAL_INIT_array, sizeof(VSM_SIGNAL_INIT_array));
+		new_init_array_len = ARRAY_SIZE(VSM_SIGNAL_INIT_array);
 
-	memcpy(VSM_SIGNAL_NEW_INIT_array,
-		VSM_SIGNAL_INIT_array, sizeof(VSM_SIGNAL_INIT_array));
-	new_init_array_len = ARRAY_SIZE(VSM_SIGNAL_INIT_array);
-
-	for (i = 0; i < mod_ary_len; i++) {
-		for (j = 0; j < new_init_array_len; j++) {
-			if (VSM_SIGNAL_MODIFY_array[i].addr ==
-					VSM_SIGNAL_NEW_INIT_array[j].addr) {
-				VSM_SIGNAL_NEW_INIT_array[j].value =
-					VSM_SIGNAL_MODIFY_array[i].value;
-				break;
+		for (i = 0; i < modify_array_len; i++) {
+			for (j = 0; j < new_init_array_len; j++) {
+				if (VSM_SIGNAL_MODIFY_array[i].addr == VSM_SIGNAL_NEW_INIT_array[j].addr) {
+					VSM_SIGNAL_NEW_INIT_array[j].value = VSM_SIGNAL_MODIFY_array[i].value;
+					break;
+				}
+			}
+			if (j == new_init_array_len) {
+				VSM_SIGNAL_NEW_INIT_array[j].addr = VSM_SIGNAL_MODIFY_array[i].addr;
+				VSM_SIGNAL_NEW_INIT_array[j].value = VSM_SIGNAL_MODIFY_array[i].value;
+				new_init_array_len++;
 			}
 		}
-		if (j == new_init_array_len) {
-			VSM_SIGNAL_NEW_INIT_array[j].addr =
-				VSM_SIGNAL_MODIFY_array[i].addr;
-			VSM_SIGNAL_NEW_INIT_array[j].value =
-				VSM_SIGNAL_MODIFY_array[i].value;
-			new_init_array_len++;
-		}
-	}
-
+	} else
+		new_init_array_len = 0;
 }
 
 static ssize_t show_chipinfo_value(struct device_driver *ddri, char *buf)
@@ -764,56 +741,47 @@ static ssize_t show_chipinfo_value(struct device_driver *ddri, char *buf)
 	return snprintf(buf, strlen(chipinfo), "%s", chipinfo);
 }
 
-static ssize_t
-store_trace_value(struct device_driver *ddri,
-		   const char *buf, size_t count)
+static ssize_t store_trace_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int trace;
 
 	if (sscanf(buf, "0x%x", &trace) == 1)
 		atomic_set(&bio_trace, trace);
 	else
-		pr_err("invalid content: '%s', length = %zu\n", buf, count);
+		BIOMETRIC_PR_ERR("invalid content: '%s', length = %zu\n", buf, count);
 
 	return count;
 }
 
-static ssize_t
-store_rstb_value(struct device_driver *ddri,
-		  const char *buf, size_t count)
+static ssize_t store_rstb_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int value = 0;
 	int ret = 0;
 
 	ret = kstrtoint(buf, 10, &value);
 
-	if (ret == 0) {
+	if (ret != 0) {
 		if (value == 1)
-			pinctrl_select_state(
-				pinctrl_gpios, bio_pins_reset_high);
+			pinctrl_select_state(pinctrl_gpios, bio_pins_reset_high);
 		else if (value == 0)
 			pinctrl_select_state(pinctrl_gpios, bio_pins_reset_low);
 		else
-			pr_err("Wrong parameter, %d\n", value);
+			BIOMETRIC_PR_ERR("Wrong parameter, %d\n", value);
 	} else
-		pr_err("Wrong parameter, %s\n", buf);
+		BIOMETRIC_PR_ERR("Wrong parameter, %s\n", buf);
 
 	return count;
 }
 
-static ssize_t
-store_io_value(struct device_driver *ddri,
-		const char *buf, size_t count)
+static ssize_t store_io_value(struct device_driver *ddri, const char *buf, size_t count)
 {
 	u32 value[4] = {0};
 	u32 address[4] = {0};
 	struct bus_data_t data;
-	int num = sscanf(buf, "%x %x %x %x %x %x %x %x ",
-		&address[0], &value[0], &address[1],
+	int num = sscanf(buf, "%x %x %x %x %x %x %x %x ", &address[0], &value[0], &address[1],
 		&value[1], &address[2], &value[2], &address[3], &value[3]);
 
-	pr_notice("(%d, %x, %x, %x, %x, %x, %x, %x, %x)\n",
-		num, address[0], value[0], address[1],
+	pr_notice("(%d, %x, %x, %x, %x, %x, %x, %x, %x)\n", num, address[0], value[0], address[1],
 		value[1], address[2], value[2], address[3], value[3]);
 	if (num == 1) {
 		data.addr = address[0] >> 8;
@@ -824,8 +792,7 @@ store_io_value(struct device_driver *ddri,
 
 		/* mt2511_read((u16)address[0], lastRead); */
 		lastAddress = address[0];
-		pr_notice("address[0x04%x] = %x\n",
-			address[0], *(u32 *)lastRead);
+		pr_notice("address[0x04%x] = %x\n", address[0], *(u32 *)lastRead);
 	} else if (num >= 2) {
 		data.addr = address[0] >> 8;
 		data.reg = address[0] & 0xFF;
@@ -842,8 +809,7 @@ store_io_value(struct device_driver *ddri,
 			data.data_buf = (uint8_t *) &value[1];
 			vsm_driver_write_register(&data);
 			/* mt2511_write((u16)address[1], value[1]); */
-			pr_notice("address[0x04%x] = %x\n",
-				address[1], value[1]);
+			pr_notice("address[0x04%x] = %x\n", address[1], value[1]);
 		}
 
 		if (num >= 6) {
@@ -853,8 +819,7 @@ store_io_value(struct device_driver *ddri,
 			data.data_buf = (uint8_t *) &value[2];
 			vsm_driver_write_register(&data);
 			/* mt2511_write((u16)address[2], value[2]); */
-			pr_notice("address[0x04%x] = %x\n",
-				address[2], value[2]);
+			pr_notice("address[0x04%x] = %x\n", address[2], value[2]);
 		}
 
 		if (num == 8) {
@@ -864,11 +829,10 @@ store_io_value(struct device_driver *ddri,
 			data.data_buf = (uint8_t *) &value[3];
 			vsm_driver_write_register(&data);
 			/* mt2511_write((u16)address[3], value[3]); */
-			pr_notice("address[0x04%x] = %x\n",
-				address[3], value[3]);
+			pr_notice("address[0x04%x] = %x\n", address[3], value[3]);
 		}
 	} else
-		pr_err("invalid format = '%s'\n", buf);
+		BIOMETRIC_PR_ERR("invalid format = '%s'\n", buf);
 
 	return count;
 }
@@ -876,22 +840,19 @@ store_io_value(struct device_driver *ddri,
 static ssize_t show_io_value(struct device_driver *ddri, char *buf)
 {
 
-	return sprintf(buf, "address[%x] = %x\n",
-		lastAddress, *(u32 *)lastRead);
+	return sprintf(buf, "address[%x] = %x\n", lastAddress, *(u32 *)lastRead);
 
 }
 
-static ssize_t
-store_delay(struct device_driver *ddri,
-	     const char *buf, size_t count)
+static ssize_t store_delay(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int delayTime = 0;
 	int ret = 0;
 
 	ret = kstrtoint(buf, 10, &delayTime);
 
-	pr_debug("(%d)\n", delayTime);
-	if (0 == ret && 0 < delayTime)
+	BIOMETRIC_LOG("(%d)\n", delayTime);
+	if (0 != ret && 0 < delayTime)
 		mdelay(delayTime);
 
 	return count;
@@ -904,15 +865,12 @@ static ssize_t show_delay(struct device_driver *ddri, char *buf)
 
 }
 
-static ssize_t
-store_data(struct device_driver *ddri,
-	     const char *buf, size_t count)
+static ssize_t store_data(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int en = 0;
 	int readData[3];
 	int i;
-	int num = sscanf(buf, "%d %d %d %d", &en,
-		&readData[EKG], &readData[PPG1], &readData[PPG2]);
+	int num = sscanf(buf, "%d %d %d %d", &en, &readData[EKG], &readData[PPG1], &readData[PPG2]);
 	unsigned int enBit = 0;
 	int32_t len;
 	struct signal_data_t *temp;
@@ -927,14 +885,13 @@ store_data(struct device_driver *ddri,
 	};
 
 	if (num != 4) {
-		pr_err("Wrong parameters %d, %s\n", num, buf);
+		BIOMETRIC_PR_ERR("Wrong parameters %d, %s\n", num, buf);
 		return count;
 	}
 
 	bio_test_init();
 
-	pr_debug("%d, %d, %d, %d\n",
-		en, readData[EKG], readData[PPG1], readData[PPG2]);
+	BIOMETRIC_LOG("%d, %d, %d, %d\n", en, readData[EKG], readData[PPG1], readData[PPG2]);
 
 	mutex_lock(&bio_data_collection_mutex);
 
@@ -942,14 +899,10 @@ store_data(struct device_driver *ddri,
 	temp = reset_counter_array;
 	vsm_driver_write_signal(temp, len, &enable_data);
 	/* reset R/W counter */
-	/* disable PPG function and reset PPG1 and PPG2 write counters to 0 */
-	/* mt2511_write(0x3360, 0x0); */
-	/* reset PPG1 read counter to 0 */
-	/* mt2511_write(0x33D0, 0x60000000); */
-	/* reset PPG2 read counter to 0 */
-	/* mt2511_write(0x33E0, 0x60000000); */
-	/* reset EKG read counter to 0 */
-	/* mt2511_write(0x33C0, 0x60000000); */
+	/* mt2511_write(0x3360, 0x0); */ /* disable PPG function and reset PPG1 and PPG2 write counters to 0 */
+	/* mt2511_write(0x33D0, 0x60000000); */ /* reset PPG1 read counter to 0 */
+	/* mt2511_write(0x33E0, 0x60000000); */ /* reset PPG2 read counter to 0 */
+	/* mt2511_write(0x33C0, 0x60000000); */ /* reset EKG read counter to 0 */
 
 	for (i = 0; i < NUM_OF_TYPE; i++) {
 		if (test_info[i].filp != NULL) {
@@ -961,12 +914,10 @@ store_data(struct device_driver *ddri,
 
 	for (i = 0; i < NUM_OF_TYPE; i++) {
 		if (en & (1 << i)) {
-			test_info[i].filp =
-				bio_file_open(test_info[i].raw_data_path,
+			test_info[i].filp = bio_file_open(test_info[i].raw_data_path,
 				O_CREAT | O_WRONLY | O_TRUNC, 0644);
 			if (test_info[i].filp == NULL)
-				pr_err("open %s fail\n",
-					test_info[i].raw_data_path);
+				BIOMETRIC_PR_ERR("open %s fail\n", test_info[i].raw_data_path);
 
 			test_info[i].numOfData = readData[i];
 			enBit |= test_info[i].enBit;
@@ -987,16 +938,12 @@ store_data(struct device_driver *ddri,
 
 static ssize_t show_data(struct device_driver *ddri, char *buf)
 {
-	while ((test_info[EKG].filp != NULL) ||
-		(test_info[PPG1].filp != NULL) ||
-		(test_info[PPG2].filp != NULL))
+	while ((test_info[EKG].filp != NULL) || (test_info[PPG1].filp != NULL) || (test_info[PPG2].filp != NULL))
 		msleep(100);
 	return 0;
 }
 
-static ssize_t
-store_init(struct device_driver *ddri,
-	    const char *buf, size_t count)
+static ssize_t store_init(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int addr, value;
 	int num = sscanf(buf, "%x %x", &addr, &value);
@@ -1044,25 +991,21 @@ static ssize_t show_init(struct device_driver *ddri, char *buf)
 		sprintf(tmp_buf, "0x2334, 0x%08x\n", AFE_TCTRL_CON3);
 		strcat(buf, tmp_buf);
 	}
-	for (i = 0; i < mod_ary_len; i++) {
-		sprintf(tmp_buf, "0x%x, 0x%08x\n",
-			VSM_SIGNAL_MODIFY_array[i].addr,
-			VSM_SIGNAL_MODIFY_array[i].value);
+	for (i = 0; i < modify_array_len; i++) {
+		sprintf(tmp_buf, "0x%x, 0x%08x\n", VSM_SIGNAL_MODIFY_array[i].addr, VSM_SIGNAL_MODIFY_array[i].value);
 		strcat(buf, tmp_buf);
 	}
 
 	strcat(buf, "New init settings:\n");
-	if (mod_ary_len != 0) {
+	if (modify_array_len != 0) {
 		for (i = 0; i < new_init_array_len; i++) {
-			sprintf(tmp_buf, "0x%x, 0x%08x\n",
-				VSM_SIGNAL_NEW_INIT_array[i].addr,
+			sprintf(tmp_buf, "0x%x, 0x%08x\n", VSM_SIGNAL_NEW_INIT_array[i].addr,
 				VSM_SIGNAL_NEW_INIT_array[i].value);
 			strcat(buf, tmp_buf);
 		}
 	} else {
 		for (i = 0; i < ARRAY_SIZE(VSM_SIGNAL_INIT_array); i++) {
-			sprintf(tmp_buf, "0x%x, 0x%08x\n",
-				VSM_SIGNAL_INIT_array[i].addr,
+			sprintf(tmp_buf, "0x%x, 0x%08x\n", VSM_SIGNAL_INIT_array[i].addr,
 				VSM_SIGNAL_INIT_array[i].value);
 			strcat(buf, tmp_buf);
 		}
@@ -1073,10 +1016,7 @@ static ssize_t show_init(struct device_driver *ddri, char *buf)
 	return len;
 }
 
-static ssize_t
-store_polling_delay(
-		     struct device_driver *ddri,
-		     const char *buf, size_t count)
+static ssize_t store_polling_delay(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int delayTime = 0;
 	int ret = 0;
@@ -1084,7 +1024,7 @@ store_polling_delay(
 	ret = kstrtoint(buf, 10, &delayTime);
 
 	pr_notice("(%d)\n", delayTime);
-	if (0 == ret && 0 <= delayTime)
+	if (0 != ret && 0 <= delayTime)
 		polling_delay = delayTime;
 
 	return count;
@@ -1095,18 +1035,14 @@ static ssize_t show_polling_delay(struct device_driver *ddri, char *buf)
 	return sprintf(buf, "polling delay = %d\n", polling_delay);
 }
 
-static ssize_t
-store_latency_test(
-		    struct device_driver *ddri,
-		    const char *buf, size_t count)
+static ssize_t store_latency_test(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int num = sscanf(buf, "%d %d %d", &latency_test_data.first_data,
 		&latency_test_data.second_data, &latency_test_data.ekg_num);
 	latency_test_data.ppg1_num = latency_test_data.ekg_num;
 	latency_test_data.ppg2_num = latency_test_data.ekg_num;
 
-	pr_notice("first_data = %d, second_data = %d, delay_num = %d\n",
-		latency_test_data.first_data,
+	pr_notice("first_data = %d, second_data = %d, delay_num = %d\n", latency_test_data.first_data,
 		latency_test_data.second_data, latency_test_data.ekg_num);
 
 	if (num != 3) {
@@ -1118,17 +1054,14 @@ store_latency_test(
 	return count;
 }
 
-static ssize_t
-store_cali(
-	    struct device_driver *ddri,
-	    const char *buf, size_t count)
+static ssize_t store_cali(struct device_driver *ddri, const char *buf, size_t count)
 {
 	struct biometric_cali data;
 
 	int num = sscanf(buf, "%d %d", &data.pga6, &data.ambdac5_5);
 
 	if (num != 2)
-		pr_err("Invalid parameter : %s\n", buf);
+		BIOMETRIC_PR_ERR("Invalid parameter : %s\n", buf);
 	else
 		MT6381_WriteCalibration(&data);
 
@@ -1137,28 +1070,23 @@ store_cali(
 
 static ssize_t show_cali(struct device_driver *ddri, char *buf)
 {
-	return sprintf(buf, "pga6 = %d, ambdac5.5 = %d, dc_offset = %lld\n",
-		pga6, ambdac5_5, dc_offset);
+	return sprintf(buf, "pga6 = %d, ambdac5.5 = %d, dc_offset = %lld\n", pga6, ambdac5_5, dc_offset);
 }
 
-static ssize_t
-store_stress(
-	      struct device_driver *ddri,
-	      const char *buf,
-	      size_t count)
+static ssize_t store_stress(struct device_driver *ddri, const char *buf, size_t count)
 {
 	int err;
 
 	err = kstrtoint(buf, 10, &stress_test);
 
 	if (err != 0) {
-		pr_err("Wrong parameters %d, %s\n", err, buf);
+		BIOMETRIC_PR_ERR("Wrong parameters %d, %s\n", err, buf);
 		return count;
 	}
 
 	bio_stress_test_init();
 
-	pr_debug("%d\n", stress_test);
+	BIOMETRIC_LOG("%d\n", stress_test);
 
 	mutex_lock(&bio_data_collection_mutex);
 
@@ -1178,11 +1106,7 @@ store_stress(
 	return count;
 }
 
-static ssize_t
-store_offline_mode(
-	       struct device_driver *ddri,
-	       const char *buf,
-	       size_t count)
+static ssize_t store_offline_mode(struct device_driver *ddri, const char *buf, size_t count)
 {
 	char file_name[MAX_FILE_LENGTH];
 	int offline_mode;
@@ -1196,7 +1120,7 @@ store_offline_mode(
 	} else if ((num == 1 || num == 2) && offline_mode == 0) {
 		offline_mode_en = false;
 	} else
-		pr_err("Wrong parameters, %s\n", buf);
+		BIOMETRIC_PR_ERR("Wrong parameters, %s\n", buf);
 
 	return count;
 }
@@ -1216,23 +1140,21 @@ static ssize_t show_offline_mode(struct device_driver *ddri, char *buf)
 		else
 			filp_close(filp, NULL);
 	}
-	return sprintf(buf, "%d, %s\n",
-		offline_mode_en, offline_mode_file_name);
+	return sprintf(buf, "%d, %s\n", offline_mode_en, offline_mode_file_name);
 }
 
-static DRIVER_ATTR(chipinfo, 0444, show_chipinfo_value, NULL);
-static DRIVER_ATTR(trace, 0644, NULL, store_trace_value);
-static DRIVER_ATTR(rstb, 0644, NULL, store_rstb_value);
-static DRIVER_ATTR(io, 0644, show_io_value, store_io_value);
-static DRIVER_ATTR(delay, 0644, show_delay, store_delay);
-static DRIVER_ATTR(data, 0644, show_data, store_data);
-static DRIVER_ATTR(init, 0644, show_init, store_init);
-static DRIVER_ATTR(polling_delay, 0644,
-	show_polling_delay, store_polling_delay);
-static DRIVER_ATTR(latency_test, 0644, NULL, store_latency_test);
-static DRIVER_ATTR(cali, 0644, show_cali, store_cali);
-static DRIVER_ATTR(stress, 0644, NULL, store_stress);
-static DRIVER_ATTR(offline_mode, 0644, show_offline_mode, store_offline_mode);
+static DRIVER_ATTR(chipinfo, S_IRUGO, show_chipinfo_value, NULL);
+static DRIVER_ATTR(trace, S_IWUSR | S_IRUGO, NULL, store_trace_value);
+static DRIVER_ATTR(rstb, S_IWUSR | S_IRUGO, NULL, store_rstb_value);
+static DRIVER_ATTR(io, S_IRUGO | S_IWUSR, show_io_value, store_io_value);
+static DRIVER_ATTR(delay, S_IRUGO | S_IWUSR, show_delay, store_delay);
+static DRIVER_ATTR(data, S_IRUGO | S_IWUSR, show_data, store_data);
+static DRIVER_ATTR(init, S_IRUGO | S_IWUSR, show_init, store_init);
+static DRIVER_ATTR(polling_delay, S_IRUGO | S_IWUSR, show_polling_delay, store_polling_delay);
+static DRIVER_ATTR(latency_test, S_IRUGO | S_IWUSR, NULL, store_latency_test);
+static DRIVER_ATTR(cali, S_IRUGO | S_IWUSR, show_cali, store_cali);
+static DRIVER_ATTR(stress, S_IRUGO | S_IWUSR, NULL, store_stress);
+static DRIVER_ATTR(offline_mode, S_IRUGO | S_IWUSR, show_offline_mode, store_offline_mode);
 
 static struct driver_attribute *mt6381_attr_list[] = {
 	&driver_attr_chipinfo,	/*chip information */
@@ -1260,8 +1182,7 @@ static int mt6381_create_attr(struct device_driver *driver)
 	for (idx = 0; idx < num; idx++) {
 		err = driver_create_file(driver, mt6381_attr_list[idx]);
 		if (err != 0) {
-			pr_err("driver_create_file (%s) = %d\n",
-				mt6381_attr_list[idx]->attr.name,
+			BIOMETRIC_PR_ERR("driver_create_file (%s) = %d\n", mt6381_attr_list[idx]->attr.name,
 				err);
 			break;
 		}
@@ -1285,10 +1206,8 @@ static int mt6381_delete_attr(struct device_driver *driver)
 
 
 /* mt6381 spec relevant */
-enum vsm_status_t
-vsm_driver_read_register_batch(
-				enum vsm_sram_type_t sram_type, u8 *buf,
-				u16 length)
+enum vsm_status_t vsm_driver_read_register_batch(enum vsm_sram_type_t sram_type, u8 *buf,
+						 u16 length)
 {
 	int res;
 	/* ///int i; */
@@ -1310,7 +1229,7 @@ vsm_driver_read_register_batch(
 
 	res = i2c_transfer(mt6381_i2c_client->adapter, msg, length * 2);
 	if (res < 0)
-		pr_err("mt6381 i2c read failed. errno:%d\n", res);
+		BIOMETRIC_PR_ERR("mt6381 i2c read failed. errno:%d\n", res);
 	else
 		memcpy(buf, msg[1].buf, length * 4);
 
@@ -1327,8 +1246,7 @@ enum vsm_status_t vsm_driver_read_register(struct bus_data_t *data)
 	}
 
 	for (i = 0; i < 5; i++) {
-		ret = mt6381_i2c_write_read(data->addr, data->reg,
-			data->data_buf, data->length);
+		ret = mt6381_i2c_write_read(data->addr, data->reg, data->data_buf, data->length);
 		if (ret == VSM_STATUS_OK)
 			break;
 	}
@@ -1340,7 +1258,7 @@ enum vsm_status_t vsm_driver_read_register(struct bus_data_t *data)
 	}
 
 	if (ret < 0) {
-		pr_err("vsm_driver_read_register error (%d)\r\n", ret);
+		BIOMETRIC_PR_ERR("vsm_driver_read_register error (%d)\r\n", ret);
 		return VSM_STATUS_ERROR;
 	} else {
 		return VSM_STATUS_OK;
@@ -1357,14 +1275,13 @@ enum vsm_status_t vsm_driver_write_register(struct bus_data_t *data)
 	int32_t ret, i = 0;
 
 	if (data == NULL) {
-		pr_err("NULL data parameter\n");
+		BIOMETRIC_PR_ERR("NULL data parameter\n");
 		return VSM_STATUS_INVALID_PARAMETER;
 	}
 
 	if (DBG_WRITE) {
 		pr_debug("%s():addr 0x%x, reg 0x%x, value 0x%x, len %d",
-			 __func__, data->addr, reg_addr,
-			 *(uint32_t *) (data->data_buf), data_len);
+			 __func__, data->addr, reg_addr, *(uint32_t *) (data->data_buf), data_len);
 	}
 
 	txbuffer[0] = reg_addr;
@@ -1374,21 +1291,19 @@ enum vsm_status_t vsm_driver_write_register(struct bus_data_t *data)
 		if (ret == (data_len + 1))
 			break;
 
-		pr_err("mt6381_i2c_write error(%d), reg_addr = %x, reg_data = %x\n",
+		BIOMETRIC_PR_ERR("mt6381_i2c_write error(%d), reg_addr = %x, reg_data = %x\n",
 			ret, reg_addr, *(uint32_t *) (data->data_buf));
 	}
 
 	if (ret < 0) {
-		pr_err("I2C Trasmit error(%d)\n", ret);
+		BIOMETRIC_PR_ERR("I2C Trasmit error(%d)\n", ret);
 		return VSM_STATUS_ERROR;
 	} else {
 		return VSM_STATUS_OK;
 	}
 }
 
-static enum vsm_status_t vsm_driver_write_signal(
-					  struct signal_data_t *reg_addr,
-					  int32_t len,
+static enum vsm_status_t vsm_driver_write_signal(struct signal_data_t *reg_addr, int32_t len,
 					  uint32_t *enable_data)
 {
 	struct bus_data_t data;
@@ -1411,31 +1326,30 @@ static enum vsm_status_t vsm_driver_write_signal(
 		data_buf = (reg_addr + i)->value;
 
 		if (inCali && ((reg_addr + i)->addr == 0x3318)) {
-			data_buf &= ~(PPG_AMDAC2_MASK |
-				PPG_AMDAC1_MASK | PPG_PGA_GAIN_MASK);
+			data_buf &= ~(PPG_AMDAC2_MASK | PPG_AMDAC1_MASK | PPG_PGA_GAIN_MASK);
 			data_buf |= (cali_ambdac_amb << PPG_AMDAC2_OFFSET);
 			data_buf |= (cali_ambdac_led << PPG_AMDAC1_OFFSET);
 			data_buf |= (cali_pga << PPG_PGA_GAIN_OFFSET);
 			if (atomic_read(&bio_trace) != 0)
-				pr_debug("0x3318 = %x, %d, %d, %d\n",
-					data_buf,
-					cali_ambdac_amb,
-					cali_ambdac_led,
-					cali_pga);
-		} else if (inCali && (cali_ambdac_amb == 0) &&
-			((reg_addr + i)->addr == 0x331C)) {
+				BIOMETRIC_LOG("0x3318 = %x, %d, %d, %d\n", data_buf,
+					cali_ambdac_amb, cali_ambdac_led, cali_pga);
+		} else if (inCali && (cali_ambdac_amb == 0) && ((reg_addr + i)->addr == 0x331C)) {
 			data_buf &= ~(0x800);
 		} else if (inCali && ((reg_addr + i)->addr == 0x332C)) {
 			data_buf = 0;
 			if (atomic_read(&bio_trace) != 0)
-				pr_debug("0x332C = %x\n", data_buf);
+				BIOMETRIC_LOG("0x332C = %x\n", data_buf);
 		}
 
 		data.length = sizeof(data_buf);
+		if (DBG) {
+			BIOMETRIC_LOG
+			    ("%d:vsm_driver_write, addr:0x%x, reg:0x%x, data 0x%x, length %d \r\n",
+			     i, data.addr, data.reg, data_buf, data.length);
+		}
 		err = vsm_driver_write_register(&data);
 
-		if (((reg_addr + i)->addr == 0x3300) &&
-			((reg_addr + i + 1)->addr == 0x3300))
+		if (((reg_addr + i)->addr == 0x3300) && ((reg_addr + i + 1)->addr == 0x3300))
 			mdelay(50);
 
 	}
@@ -1452,11 +1366,9 @@ static enum vsm_status_t vsm_driver_set_signal(enum vsm_signal_t signal)
 	if (current_signal == 0) {
 		/* reset digital*/
 		if (!IS_ERR(pinctrl_gpios)) {
-			pinctrl_select_state(
-				pinctrl_gpios, bio_pins_reset_low);
+			pinctrl_select_state(pinctrl_gpios, bio_pins_reset_low);
 			msleep(20);
-			pinctrl_select_state(
-				pinctrl_gpios, bio_pins_reset_high);
+			pinctrl_select_state(pinctrl_gpios, bio_pins_reset_high);
 			msleep(20);
 		}
 		/* initial setting */
@@ -1469,9 +1381,9 @@ static enum vsm_status_t vsm_driver_set_signal(enum vsm_signal_t signal)
 		}
 		vsm_driver_write_signal(temp, len, &enable_data);
 		enable_time = sched_clock();
-		pre_t[VSM_SRAM_EKG] = sched_clock();
-		pre_t[VSM_SRAM_PPG1] = sched_clock();
-		pre_t[VSM_SRAM_PPG2] = sched_clock();
+		previous_timestamp[VSM_SRAM_EKG] = sched_clock();
+		previous_timestamp[VSM_SRAM_PPG1] = sched_clock();
+		previous_timestamp[VSM_SRAM_PPG2] = sched_clock();
 		if (!inCali)
 			ppg_control_init();
 		data_dropped = false;
@@ -1501,19 +1413,16 @@ static enum vsm_status_t vsm_driver_set_signal(enum vsm_signal_t signal)
 	return err;
 }
 
-static enum vsm_status_t vsm_driver_set_signal_offline_mode(
-	enum vsm_signal_t signal)
+static enum vsm_status_t vsm_driver_set_signal_offline_mode(enum vsm_signal_t signal)
 {
 	int i;
-	int index = driver_type_to_index(signal);
-	int apk_type = driver_type_to_apk_type(signal);
 
 	if (olm_info_p == NULL) {
-		olm_info_p = kzalloc(
-			sizeof(struct offline_mode_info), GFP_KERNEL);
-		if (olm_info_p == NULL)
+		olm_info_p = kzalloc(sizeof(struct offline_mode_info), GFP_KERNEL);
+		if (olm_info_p == NULL) {
+			BIOMETRIC_PR_ERR("alloc olm_info_p fail\n");
 			return 0;
-
+		}
 		memset(olm_info_p, 0, sizeof(struct offline_mode_info));
 
 		olm_info_p->en_time = sched_clock();
@@ -1521,27 +1430,23 @@ static enum vsm_status_t vsm_driver_set_signal_offline_mode(
 		strcpy(olm_info_p->raw_data_path, "/data/bio/");
 		strcat(olm_info_p->raw_data_path, offline_mode_file_name);
 		for (i = 0; i < ARRAY_SIZE(olm_info_p->sensor); i++) {
-			olm_info_p->sensor[i].filp =
-				bio_file_open(olm_info_p->raw_data_path,
-					O_RDONLY, 0644);
+			olm_info_p->sensor[i].filp = bio_file_open(olm_info_p->raw_data_path, O_RDONLY, 0644);
 			if (olm_info_p->sensor[i].filp == NULL) {
-				pr_err("open %s fail\n",
-					olm_info_p->raw_data_path);
+				BIOMETRIC_PR_ERR("open %s fail\n", olm_info_p->raw_data_path);
 				return VSM_STATUS_ERROR;
 			}
 		}
 	}
 
-	if (index >= 0) {
-		olm_info_p->sensor[index].apk_type = apk_type;
-		olm_info_p->sensor[index].num_of_data = 0;
+	if (driver_type_to_index(signal) >= 0) {
+		olm_info_p->sensor[driver_type_to_index(signal)].apk_type = driver_type_to_apk_type(signal);
+		olm_info_p->sensor[driver_type_to_index(signal)].num_of_data = 0;
 	}
 
 	return VSM_STATUS_OK;
 }
 
-static enum vsm_status_t vsm_driver_set_read_counter(
-	enum vsm_sram_type_t sram_type, uint32_t *counter)
+static enum vsm_status_t vsm_driver_set_read_counter(enum vsm_sram_type_t sram_type, uint32_t *counter)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -1581,13 +1486,12 @@ static enum vsm_status_t vsm_driver_set_read_counter(
 	err = vsm_driver_write_register(&data);
 
 	if (err != VSM_STATUS_OK)
-		pr_err("vsm_driver_set_read_counter fail : %d\n", err);
+		BIOMETRIC_PR_ERR("vsm_driver_set_read_counter fail : %d\n", err);
 
 	return err;
 }
 
-static enum vsm_status_t vsm_driver_get_read_counter(
-	enum vsm_sram_type_t sram_type, uint32_t *counter)
+static enum vsm_status_t vsm_driver_get_read_counter(enum vsm_sram_type_t sram_type, uint32_t *counter)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -1630,17 +1534,14 @@ static enum vsm_status_t vsm_driver_get_read_counter(
 		    ((*counter & 0x01ff0000) >> 16) >
 		    VSM_SRAM_LEN ? 0 : ((*counter & 0x01ff0000) >> 16);
 		if (DBG)
-			pr_debug("vsm_driver_get_read_counter 0x%x \r\n",
-				*counter);
+			pr_debug("vsm_driver_get_read_counter 0x%x \r\n", *counter);
 	}
 	return err;
 }
 
 
-static enum vsm_status_t
-vsm_driver_write_counter(
-			  enum vsm_sram_type_t sram_type,
-			  uint32_t *write_counter)
+static enum vsm_status_t vsm_driver_write_counter(enum vsm_sram_type_t sram_type,
+						  uint32_t *write_counter)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -1689,9 +1590,161 @@ vsm_driver_write_counter(
 	return err;
 }
 
-static enum vsm_status_t vsm_driver_read_sram(
-				       enum vsm_sram_type_t sram_type,
-				       uint32_t *data_buf, uint32_t *amb_buf,
+int32_t vsm_driver_check_sample_rate(enum vsm_sram_type_t sram_type)
+{
+	int32_t sample_rate, err = 0;
+	struct bus_data_t data;
+
+	switch (sram_type) {
+	case VSM_SRAM_EKG:
+		{
+			int32_t ekg_sample_data1, ekg_sample_data2;
+
+			data.addr = (EKG_SAMPLE_RATE_ADDR1 & 0xFF00) >> 8;
+			data.reg = (EKG_SAMPLE_RATE_ADDR1 & 0xFF);
+			data.data_buf = (uint8_t *) &ekg_sample_data1;
+			data.length = sizeof(ekg_sample_data1);
+			err = vsm_driver_read_register(&data);
+			if (err == VSM_STATUS_OK) {
+				data.addr = (EKG_SAMPLE_RATE_ADDR2 & 0xFF00) >> 8;
+				data.reg = (EKG_SAMPLE_RATE_ADDR2 & 0xFF);
+				data.data_buf = (uint8_t *) &ekg_sample_data2;
+				err = vsm_driver_read_register(&data);
+
+				if (err == VSM_STATUS_OK) {
+					if ((ekg_sample_data1 & 0x7) == 0
+					    && ((ekg_sample_data2 & 0x1C0000) >> 18) == 0) {
+						sample_rate = 64;
+					} else if ((ekg_sample_data1 & 0x7) == 1
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 1) {
+						sample_rate = 128;
+					} else if ((ekg_sample_data1 & 0x7) == 2
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 2) {
+						sample_rate = 256;
+					} else if ((ekg_sample_data1 & 0x7) == 3
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 3) {
+						sample_rate = 512;
+					} else if ((ekg_sample_data1 & 0x7) == 4
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 3) {
+						sample_rate = 1024;
+					} else if ((ekg_sample_data1 & 0x7) == 5
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 3) {
+						sample_rate = 2048;
+					} else if ((ekg_sample_data1 & 0x7) == 6
+						   && ((ekg_sample_data2 & 0x1C0000) >> 18) == 3) {
+						sample_rate = 4096;
+					} else {
+						sample_rate = EKG_DEFAULT_SAMPLE_RATE;
+					}
+				} else {
+					sample_rate = EKG_DEFAULT_SAMPLE_RATE;
+				}
+			} else {
+				sample_rate = EKG_DEFAULT_SAMPLE_RATE;
+			}
+		}
+		break;
+
+	case VSM_SRAM_PPG1:
+	case VSM_SRAM_PPG2:
+		{
+			uint32_t ppg_sample_data;
+
+			data.addr = (PPG_SAMPLE_RATE_ADDR & 0xFF00) >> 8;
+			data.reg = (PPG_SAMPLE_RATE_ADDR & 0xFF);
+			data.data_buf = (uint8_t *) &ppg_sample_data;
+			data.length = sizeof(ppg_sample_data);
+			err = vsm_driver_read_register(&data);
+			if (err == VSM_STATUS_OK) {
+				pr_debug("ppg_sample_data 0x%x\r\n", ppg_sample_data);
+				sample_rate = PPG_FSYS / ((ppg_sample_data & 0x3FFF) + 1);
+			} else {
+				BIOMETRIC_PR_ERR("ppg_sample_data i2c error, err %d\r\n", err);
+				sample_rate = PPG_DEFAULT_SAMPLE_RATE;
+			}
+		}
+		break;
+	case VSM_SRAM_BISI:
+	case VSM_SRAM_NUMBER:
+	default:
+		return VSM_STATUS_INVALID_PARAMETER;
+	}
+	return sample_rate;
+}
+
+enum vsm_status_t vsm_driver_check_write_counter(enum vsm_sram_type_t sram_type,
+						 uint32_t read_counter, uint32_t *write_counter)
+{
+	int i = 0;
+	u64 *pre_timestamp, cur_timestamp;
+	uint32_t sample_rate, err = VSM_STATUS_OK;
+	uint32_t expected_counter = 0, real_counter = 0;
+
+	if (write_counter == NULL)
+		return VSM_STATUS_INVALID_PARAMETER;
+
+	switch (sram_type) {
+	case VSM_SRAM_EKG:
+		pre_timestamp = &pre_ekg_timestamp;
+		sample_rate = vsm_driver_check_sample_rate(sram_type);
+		break;
+
+	case VSM_SRAM_PPG1:
+		pre_timestamp = &pre_ppg1_timestamp;
+		sample_rate = vsm_driver_check_sample_rate(sram_type);
+		break;
+
+	case VSM_SRAM_PPG2:
+		pre_timestamp = &pre_ppg2_timestamp;
+		sample_rate = vsm_driver_check_sample_rate(sram_type);
+		break;
+
+	case VSM_SRAM_BISI:
+		vsm_driver_write_counter(sram_type, write_counter);
+		return VSM_STATUS_OK;
+
+	case VSM_SRAM_NUMBER:
+	default:
+		err = VSM_STATUS_INVALID_PARAMETER;
+		return err;
+	}
+
+	/* cur_timestamp = xTaskGetTickCount(); */
+	/* ///cur_timestamp = vsm_driver_get_ms_tick(); */
+	cur_timestamp = getCurNS();
+	if (*pre_timestamp == 0) {
+		err = vsm_driver_write_counter(sram_type, write_counter);
+	} else {
+		expected_counter =
+		    (uint32_t) (((cur_timestamp - *pre_timestamp) * sample_rate) / 1000000000);
+		for (i = 0; i < 10; i++) {
+			vsm_driver_write_counter(sram_type, write_counter);
+			real_counter =
+			    (*write_counter >=
+			     read_counter) ? (*write_counter - read_counter) : (VSM_SRAM_LEN -
+										read_counter +
+										*write_counter);
+			if (sram_type == VSM_SRAM_PPG1 || sram_type == VSM_SRAM_PPG2)
+				real_counter /= 2;
+
+			pr_debug("sample_rate %u, real_counter %u,expected_counter %u", sample_rate,
+				 real_counter, expected_counter);
+			if (real_counter < (20 + expected_counter)
+			    && real_counter > (expected_counter >
+					       20 ? (expected_counter - 20) : 0)) {
+				break;
+			}
+			pr_debug("try %d times", i);
+		}
+	}
+	pr_debug("%s():cur_timestamp %llu, pre_timestamp %llu", __func__, cur_timestamp,
+		 *pre_timestamp);
+	*pre_timestamp = cur_timestamp;
+	return err;
+}
+
+#define READ_DEBUG
+static enum vsm_status_t vsm_driver_read_sram(enum vsm_sram_type_t sram_type, uint32_t *data_buf, uint32_t *amb_buf,
 				       u32 *len)
 {
 	int err = VSM_STATUS_OK;
@@ -1718,47 +1771,42 @@ static enum vsm_status_t vsm_driver_read_sram(
 	} while (temp != read_counter);
 
 	/* write counter */
+	/* vsm_driver_check_write_counter(sram_type, read_counter, &write_counter); */
 	vsm_driver_write_counter(sram_type, &write_counter);
 	do {
 		temp = write_counter;
 		vsm_driver_write_counter(sram_type, &write_counter);
 	} while (temp != write_counter);
 
+	/* sram_write_counter = ((register_val & 0x01ff0000) >> 16); // bit 25 ~ bit 16 */
+	/* vm_log_info("w_check: sram_write_counter %d, sram_type %d", sram_write_counter, sram_type); */
+	/* irq_th = register_val & 0x1ff; */
 	/* only get even number to prevent the reverse of ppg and ambient */
 	/* compute sram length */
 	sram_len =
 	    (write_counter >=
-	     read_counter) ? (write_counter - read_counter) :
-	     (VSM_SRAM_LEN - read_counter + write_counter);
+	     read_counter) ? (write_counter - read_counter) : (VSM_SRAM_LEN - read_counter +
+							       write_counter);
 	sram_len = ((sram_len % 2) == 0) ? sram_len : sram_len - 1;
 
 	*len = sram_len;
 
 	current_timestamp = sched_clock();
-	/* sram will wraparound after 375000000ns =
-	 * VSM_SRAM_LEN * (1000000000 / 1024)
-	 */
-	if (((current_timestamp - pre_t[sram_type]) >= 350000000LL) ||
-		(((current_timestamp - pre_t[sram_type]) >= 300000000LL) &&
-		sram_len < 100))
-		aee_kernel_warning("MT6381", "Data dropped!! %d, %lld, %d\n",
-			sram_type,
-			current_timestamp - pre_t[sram_type],
-			sram_len);
+	/* sram will wraparound after 375000000ns = VSM_SRAM_LEN * (1000000000 / 1024) */
+	if (((current_timestamp - previous_timestamp[sram_type]) >= 350000000LL) ||
+		(((current_timestamp - previous_timestamp[sram_type]) >= 300000000LL) && sram_len < 100))
+		aee_kernel_warning("MT6381", "Data dropped!! %d, %lld, %d\n", sram_type,
+			current_timestamp - previous_timestamp[sram_type], sram_len);
 	if (atomic_read(&bio_trace) != 0)
-		pr_debug("Data read, %d, %lld, %d\n", sram_type,
-			current_timestamp - pre_t[sram_type],
-			sram_len);
-	pre_t[sram_type] = current_timestamp;
+		BIOMETRIC_LOG("Data read, %d, %lld, %d\n", sram_type,
+			current_timestamp - previous_timestamp[sram_type], sram_len);
+	previous_timestamp[sram_type] = current_timestamp;
 
 	if (sram_len > 0) {
 		if (sram_type == VSM_SRAM_EKG) {
-			/* drop fisrt two garbage bytes
-			 * of EKG data after enable
-			 */
+			/* drop fisrt two garbage bytes of EKG data after enable */
 			while (numOfEKGDataNeedToDrop > 0 && sram_len > 0) {
-				err = vsm_driver_read_register_batch(
-					sram_type, (u8 *) data_buf, 1);
+				err = vsm_driver_read_register_batch(sram_type, (u8 *) data_buf, 1);
 				if (err < 0) {
 					err = VSM_STATUS_INVALID_PARAMETER;
 					*len = sram_len = 0;
@@ -1772,13 +1820,11 @@ static enum vsm_status_t vsm_driver_read_sram(
 				return err;
 		}
 		numOfData[sram_type] += sram_len;
-		rate[sram_type] = numOfData[sram_type] *
-			1000000000 / (current_timestamp - enable_time);
+		rate[sram_type] = numOfData[sram_type] * 1000000000 / (current_timestamp - enable_time);
 
 		/* 2. get sram data to data_buf */
 		/* get sram data */
-		err = vsm_driver_read_register_batch(
-			sram_type, (u8 *) data_buf, sram_len);
+		err = vsm_driver_read_register_batch(sram_type, (u8 *) data_buf, sram_len);
 		if (err < 0) {
 			err = VSM_STATUS_INVALID_PARAMETER;
 			*len = sram_len = 0;
@@ -1790,37 +1836,28 @@ static enum vsm_status_t vsm_driver_read_sram(
 			for (i = 0; i < sram_len; i++) {
 				/* down sample from 512Hz to 16Hz */
 				if (amb_read_counter % 64 == 0) {
-					vsm_driver_set_read_counter(
-						VSM_SRAM_PPG1,
-						&amb_read_counter);
-					vsm_driver_read_register_batch(
-						VSM_SRAM_PPG1,
-						(u8 *)&amb_buf[i], 1);
+					vsm_driver_set_read_counter(VSM_SRAM_PPG1, &amb_read_counter);
+					vsm_driver_read_register_batch(VSM_SRAM_PPG1, (u8 *)&amb_buf[i], 1);
 					pre_amb_data = amb_buf[i];
 
-					vsm_driver_get_read_counter(
-						VSM_SRAM_PPG1,
-						&read_counter);
+					vsm_driver_get_read_counter(VSM_SRAM_PPG1, &read_counter);
 					do {
 						temp = read_counter;
-						vsm_driver_get_read_counter(
-							VSM_SRAM_PPG1,
-							&read_counter);
+						vsm_driver_get_read_counter(VSM_SRAM_PPG1, &read_counter);
 					} while (temp != read_counter);
 				} else
 					amb_buf[i] = pre_amb_data;
-				amb_read_counter = (amb_read_counter + 1) %
-					VSM_SRAM_LEN;
+				amb_read_counter = (amb_read_counter + 1) % VSM_SRAM_LEN;
 			}
 		}
 
 		if (atomic_read(&bio_trace) != 0) {
-			pr_debug("%s, type: %d, len,%d,%d,%d,%lld\n",
-				__func__, sram_type, sram_len,
-				read_counter, write_counter, rate[sram_type]);
-			pr_debug("delta: %lld, %lld, %lld, %lld\n",
-				sched_clock() - current_timestamp,
-				numOfData[0], numOfData[1], numOfData[2]);
+			BIOMETRIC_LOG("%s =====> sram_type: %d, sram_len,%d,%d,%d,%lld\n",
+					__func__, sram_type, sram_len,
+					read_counter, write_counter, rate[sram_type]);
+			BIOMETRIC_LOG("delta: %lld, %lld, %lld, %lld\n",
+					sched_clock() - current_timestamp,
+					numOfData[0], numOfData[1], numOfData[2]);
 		}
 	} else {
 		err = VSM_STATUS_INVALID_PARAMETER;
@@ -1829,8 +1866,7 @@ static enum vsm_status_t vsm_driver_read_sram(
 	return err;
 }
 
-static enum vsm_status_t _vsm_driver_read_offline_mode_data(
-	struct raw_data_info *info)
+static enum vsm_status_t _vsm_driver_read_offline_mode_data(struct raw_data_info *info)
 {
 	ssize_t count;
 	char buf[MAX_LENGTH_PER_LINE];
@@ -1842,15 +1878,14 @@ static enum vsm_status_t _vsm_driver_read_offline_mode_data(
 	do {
 		pbuf = buf;
 		memset(pbuf, 0, MAX_LENGTH_PER_LINE);
-		count = bio_file_read_line(
-			info->filp, 0, pbuf, MAX_LENGTH_PER_LINE);
+		count = bio_file_read_line(info->filp, 0, pbuf, MAX_LENGTH_PER_LINE);
 		if (count > 0) {
 			int err;
 			int i;
 
 			str = strsep(&pbuf, ",");
 			if (str == NULL) {
-				pr_err("Parsing fail, %s\n", pbuf);
+				BIOMETRIC_PR_ERR("Parsing fail, %s\n", pbuf);
 				ret = VSM_STATUS_ERROR;
 				break;
 			}
@@ -1858,8 +1893,7 @@ static enum vsm_status_t _vsm_driver_read_offline_mode_data(
 			if (isdigit(str[0])) {
 				err = kstrtoint(str, 10, &result);
 				if (err != 0) {
-					pr_err("Parsing fail %d, %s\n",
-						err, str);
+					BIOMETRIC_PR_ERR("Parsing fail %d, %s\n", err, str);
 					ret = VSM_STATUS_ERROR;
 					break;
 				}
@@ -1874,14 +1908,13 @@ static enum vsm_status_t _vsm_driver_read_offline_mode_data(
 			for (i = 0; i < NUM_OF_DATA_PER_LINE; i++) {
 				str = strsep(&pbuf, ",");
 				if (str == NULL) {
-					pr_err("Parsing fail, %s\n", pbuf);
+					BIOMETRIC_PR_ERR("Parsing fail, %s\n", pbuf);
 					ret = VSM_STATUS_ERROR;
 					break;
 				}
 				err = kstrtoint(str, 10, &result);
 				if (err != 0) {
-					pr_err("Parsing fail %d, %s\n",
-						err, pbuf);
+					BIOMETRIC_PR_ERR("Parsing fail %d, %s\n", err, pbuf);
 					ret = VSM_STATUS_ERROR;
 					break;
 				}
@@ -1895,8 +1928,7 @@ static enum vsm_status_t _vsm_driver_read_offline_mode_data(
 	return ret;
 }
 
-static enum vsm_status_t vsm_driver_read_offline_mode_data(
-	enum vsm_signal_t type, uint32_t *data_buf, u32 *len)
+static enum vsm_status_t vsm_driver_read_offline_mode_data(enum vsm_signal_t type, uint32_t *data_buf, u32 *len)
 {
 	int64_t current_time;
 	int target_num;
@@ -1907,34 +1939,28 @@ static enum vsm_status_t vsm_driver_read_offline_mode_data(
 	current_time = sched_clock();
 
 	if (index < 0) {
-		pr_err("Wrong type %d\n", type);
+		BIOMETRIC_PR_ERR("Wrong type %d\n", type);
 		return VSM_STATUS_INVALID_PARAMETER;
 	}
 
 	if (olm_info_p == NULL) {
-		pr_err("olm_info_p == NULL\n");
+		BIOMETRIC_PR_ERR("olm_info_p == NULL\n");
 		return VSM_STATUS_ERROR;
 	}
 
 	if (olm_info_p->sensor[index].filp == NULL) {
-		pr_err("olm_info_p->sensor[index].filp == NULL\n");
+		BIOMETRIC_PR_ERR("olm_info_p->sensor[index].filp == NULL\n");
 		return VSM_STATUS_ERROR;
 	}
 
 	target_num = (current_time - olm_info_p->en_time) * 512 / 1000000000;
 
-	for (; olm_info_p->sensor[index].num_of_data < target_num;
-		olm_info_p->sensor[index].num_of_data++) {
-		if ((olm_info_p->sensor[index].num_of_data %
-			NUM_OF_DATA_PER_LINE) == 0) {
-			/* read out one line data */
-			_vsm_driver_read_offline_mode_data(
-				&olm_info_p->sensor[index]);
-		}
+	for (; olm_info_p->sensor[index].num_of_data < target_num; olm_info_p->sensor[index].num_of_data++) {
+		if ((olm_info_p->sensor[index].num_of_data % NUM_OF_DATA_PER_LINE) == 0)
+			_vsm_driver_read_offline_mode_data(&olm_info_p->sensor[index]); /* read out one line data */
 
 		data_buf[(*len)++] = olm_info_p->sensor[index].raw_data[
-			olm_info_p->sensor[index].num_of_data %
-			NUM_OF_DATA_PER_LINE];
+			olm_info_p->sensor[index].num_of_data % NUM_OF_DATA_PER_LINE];
 	}
 
 	return VSM_STATUS_OK;
@@ -1960,8 +1986,7 @@ enum vsm_status_t vsm_driver_update_register(void)
 	return err;
 }
 
-enum vsm_status_t vsm_driver_set_tia_gain(
-	enum vsm_signal_t ppg_type, enum vsm_tia_gain_t input)
+enum vsm_status_t vsm_driver_set_tia_gain(enum vsm_signal_t ppg_type, enum vsm_tia_gain_t input)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -2032,9 +2057,8 @@ enum vsm_status_t vsm_driver_set_pga_gain(enum vsm_pga_gain_t input)
 	return err;
 }
 
-enum vsm_status_t vsm_driver_set_led_current(
-	enum vsm_led_type_t led_type,
-	enum vsm_signal_t ppg_type, uint32_t input)
+enum vsm_status_t vsm_driver_set_led_current(enum vsm_led_type_t led_type,
+					     enum vsm_signal_t ppg_type, uint32_t input)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -2107,9 +2131,8 @@ int32_t vsm_driver_chip_version_get(void)
 	return vsm_chip_version;
 }
 
-enum vsm_status_t vsm_driver_set_ambdac_current(
-	enum vsm_ambdac_type_t ambdac_type,
-	enum vsm_ambdac_current_t currentt)
+enum vsm_status_t vsm_driver_set_ambdac_current(enum vsm_ambdac_type_t ambdac_type,
+						enum vsm_ambdac_current_t currentt)
 {
 	int err = VSM_STATUS_OK;
 	struct bus_data_t data;
@@ -2131,13 +2154,11 @@ enum vsm_status_t vsm_driver_set_ambdac_current(
 		} else if (vsm_driver_chip_version_get() == CHIP_VERSION_E2) {
 			if (ambdac_type == VSM_AMBDAC_1) {
 				read_data &= ~PPG_AMDAC1_MASK;
-				read_data |=
-					(currentt & 0x7) << PPG_AMDAC1_OFFSET;
+				read_data |= (currentt & 0x7) << PPG_AMDAC1_OFFSET;
 				err = vsm_driver_write_register(&data);
 			} else if (ambdac_type == VSM_AMBDAC_2) {
 				read_data &= ~PPG_AMDAC2_MASK;
-				read_data |=
-					(currentt & 0x7) << PPG_AMDAC2_OFFSET;
+				read_data |= (currentt & 0x7) << PPG_AMDAC2_OFFSET;
 				err = vsm_driver_write_register(&data);
 			}
 		}
@@ -2239,8 +2260,7 @@ static enum vsm_status_t vsm_driver_disable_signal(enum vsm_signal_t signal)
 
 	current_signal &= ~signal;
 
-	if ((current_signal & VSM_SIGNAL_PPG1) == 0 &&
-		(current_signal & VSM_SIGNAL_PPG2) == 0)
+	if ((current_signal & VSM_SIGNAL_PPG1) == 0 && (current_signal & VSM_SIGNAL_PPG2) == 0)
 		vsm_driver_set_led(VSM_SIGNAL_PPG1, false);
 	if (signal == VSM_SIGNAL_PPG2)
 		vsm_driver_set_led(signal, false);
@@ -2254,22 +2274,18 @@ static enum vsm_status_t vsm_driver_disable_signal(enum vsm_signal_t signal)
 	return err;
 }
 
-static enum vsm_status_t vsm_driver_disable_signal_offline_mode(
-	enum vsm_signal_t signal)
+static enum vsm_status_t vsm_driver_disable_signal_offline_mode(enum vsm_signal_t signal)
 {
 	bool free_olm_info_p = true;
 	int i;
 
 	if (olm_info_p == NULL) {
-		pr_err("olm_info_p is NULL\n");
+		BIOMETRIC_PR_ERR("olm_info_p is NULL\n");
 		return VSM_STATUS_ERROR;
 	}
 
-	if (driver_type_to_index(signal) >= 0 &&
-		olm_info_p->sensor[driver_type_to_index(signal)].filp != NULL) {
-		filp_close(
-			olm_info_p->sensor[driver_type_to_index(signal)].filp,
-			NULL);
+	if (driver_type_to_index(signal) >= 0 && olm_info_p->sensor[driver_type_to_index(signal)].filp != NULL) {
+		filp_close(olm_info_p->sensor[driver_type_to_index(signal)].filp, NULL);
 		olm_info_p->sensor[driver_type_to_index(signal)].filp = NULL;
 	}
 
@@ -2295,25 +2311,19 @@ enum vsm_signal_t vsm_driver_reset_PPG_counter(void)
 	enum vsm_status_t err = VSM_STATUS_OK;
 	struct bus_data_t data;
 	uint32_t /*enable_data, */ reg_data = 0;
-	/* step 1: (disable PPG function and reset
-	 * PPG1 and PPG2 write counters to 0)
-	 */
+	/* step 1: (disable PPG function and reset PPG1 and PPG2 write counters to 0) */
 	data.addr = (DIGITAL_START_ADDR & 0xFF00) >> 8;
 	data.reg = (DIGITAL_START_ADDR & 0xFF);
 	data.data_buf = (uint8_t *) &reg_data;
 	data.length = sizeof(reg_data);
 	err = vsm_driver_write_register(&data);
 	if (err == VSM_STATUS_OK) {
-		/* step 2: 0x33D0 = 0x2000_0000
-		 * (reset PPG1 read counter to 0)
-		 */
+		/* step 2: 0x33D0 = 0x2000_0000 (reset PPG1 read counter to 0) */
 		data.reg = SRAM_PPG1_READ_COUNT_ADDR;
 		reg_data = 0x60000000;
 		err = vsm_driver_write_register(&data);
 		if (err == VSM_STATUS_OK) {
-			/* step 3: 0x33E0 = 0x2000_0000
-			 * (reset PPG2 read counter to 0)
-			 */
+			/* step 3: 0x33E0 = 0x2000_0000 (reset PPG2 read counter to 0) */
 			data.reg = SRAM_PPG2_READ_COUNT_ADDR;
 			reg_data = 0x60000000;
 			err = vsm_driver_write_register(&data);
@@ -2322,8 +2332,7 @@ enum vsm_signal_t vsm_driver_reset_PPG_counter(void)
 	return err;
 }
 
-static int MT6381_CaliReadSram(enum vsm_sram_type_t sram_type,
-	int32_t *data_buf, uint32_t len)
+static int MT6381_CaliReadSram(enum vsm_sram_type_t sram_type, int32_t *data_buf, uint32_t len)
 {
 	uint32_t temp;
 	uint32_t read_counter = 0;
@@ -2339,6 +2348,7 @@ static int MT6381_CaliReadSram(enum vsm_sram_type_t sram_type,
 	} while (temp != read_counter);
 
 	/* write counter */
+	/* vsm_driver_check_write_counter(sram_type, read_counter, &write_counter); */
 	vsm_driver_write_counter(sram_type, &write_counter);
 	do {
 		temp = write_counter;
@@ -2347,25 +2357,22 @@ static int MT6381_CaliReadSram(enum vsm_sram_type_t sram_type,
 
 	sram_len =
 	    (write_counter >=
-	     read_counter) ? (write_counter - read_counter) :
-	     (VSM_SRAM_LEN - read_counter + write_counter);
+	     read_counter) ? (write_counter - read_counter) : (VSM_SRAM_LEN - read_counter +
+							       write_counter);
 	sram_len = ((sram_len % 2) == 0) ? sram_len : sram_len - 1;
 	sram_len = (sram_len > len) ? len : sram_len;
 
 	if (sram_len > 0) {
 		/* get sram data */
-		err = vsm_driver_read_register_batch(
-			sram_type, (u8 *) data_buf, sram_len);
+		err = vsm_driver_read_register_batch(sram_type, (u8 *) data_buf, sram_len);
 		if (err < 0)
-			pr_err("vsm_driver_read_register_batch fail, %d\n",
-				err);
+			BIOMETRIC_PR_ERR("vsm_driver_read_register_batch fail, %d\n", err);
 	}
 
 	return sram_len;
 }
 
-static int MT6381_GetCalibrationData(int32_t *cali_sram1_buf,
-	int32_t *cali_sram2_buf, uint16_t pga,
+static int MT6381_GetCalibrationData(int32_t *cali_sram1_buf, int32_t *cali_sram2_buf, uint16_t pga,
 	uint16_t ambdac_amb, uint16_t ambdac_led, uint32_t len)
 {
 	uint32_t sram1_len = len;
@@ -2381,24 +2388,19 @@ static int MT6381_GetCalibrationData(int32_t *cali_sram1_buf,
 	vsm_driver_set_signal(VSM_SIGNAL_PPG1);
 	vsm_driver_set_signal(VSM_SIGNAL_PPG2);
 
-	while ((cali_sram1_buf != NULL && sram1_len != 0) ||
-		(cali_sram2_buf != NULL && sram2_len != 0)) {
+	while ((cali_sram1_buf != NULL && sram1_len != 0) || (cali_sram2_buf != NULL && sram2_len != 0)) {
 		if (cali_sram1_buf != NULL && sram1_len != 0) {
-			read_len = MT6381_CaliReadSram(VSM_SRAM_PPG1,
-				&cali_sram1_buf[len - sram1_len], sram1_len);
+			read_len = MT6381_CaliReadSram(VSM_SRAM_PPG1, &cali_sram1_buf[len - sram1_len], sram1_len);
 			if (read_len > sram1_len) {
-				pr_err("Wrong len, sram1_len = %d, read_len = %d\n",
-					sram1_len, read_len);
+				BIOMETRIC_PR_ERR("Wrong len, sram1_len = %d, read_len = %d\n", sram1_len, read_len);
 				return -1;
 			}
 			sram1_len -= read_len;
 		}
 		if (cali_sram2_buf != NULL && sram2_len != 0) {
-			read_len = MT6381_CaliReadSram(VSM_SRAM_PPG2,
-				&cali_sram2_buf[len - sram2_len], sram2_len);
+			read_len = MT6381_CaliReadSram(VSM_SRAM_PPG2, &cali_sram2_buf[len - sram2_len], sram2_len);
 			if (read_len > sram2_len) {
-				pr_err("Wrong len, sram2_len = %d, read_len = %d\n",
-					sram2_len, read_len);
+				BIOMETRIC_PR_ERR("Wrong len, sram2_len = %d, read_len = %d\n", sram2_len, read_len);
 				return -1;
 			}
 			sram2_len -= read_len;
@@ -2422,48 +2424,45 @@ static int MT6381_DoCalibration(struct biometric_cali *cali)
 	int count = 0;
 	int64_t sumOfambdac = 0;
 
-	cali_sram_buf = kzalloc(sizeof(*cali_sram_buf) *
-		CALI_DATA_LEN, GFP_KERNEL);
-	if (cali_sram_buf == NULL)
+	cali_sram_buf = kzalloc(sizeof(*cali_sram_buf) * CALI_DATA_LEN, GFP_KERNEL);
+	if (cali_sram_buf == NULL) {
+		BIOMETRIC_PR_ERR("allocate buffer fail\n");
 		return -1;
+	}
 
 	/* 1. set PGA=1, AMBDAC(AMB phase) = 0 to get AMB data A */
 	MT6381_GetCalibrationData(cali_sram_buf, NULL, 0, 0, 7, CALI_DATA_LEN);
 	for (i = CALI_DATA_STABLE_LEN; i < CALI_DATA_LEN; i += 2) {
-		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ?
-			cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
+		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ? cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
 		a += cali_sram_buf[i];
 		if (atomic_read(&bio_trace) != 0)
-			pr_debug("[%d] = %d\n", i, cali_sram_buf[i]);
+			BIOMETRIC_LOG("[%d] = %d\n", i, cali_sram_buf[i]);
 	}
 	/* 2. set PGA=1, AMBDAC(AMB phase) = 1 to get AMB data B */
 	MT6381_GetCalibrationData(cali_sram_buf, NULL, 0, 1, 7, CALI_DATA_LEN);
 	for (i = CALI_DATA_STABLE_LEN; i < CALI_DATA_LEN; i += 2) {
-		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ?
-			cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
+		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ? cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
 		b += cali_sram_buf[i];
 		if (atomic_read(&bio_trace) != 0)
-			pr_debug("[%d] = %d\n", i, cali_sram_buf[i]);
+			BIOMETRIC_LOG("[%d] = %d\n", i, cali_sram_buf[i]);
 	}
 	/* 3. set PGA=6, AMBDAC(AMB phase) = 1 to get AMB data C */
 	MT6381_GetCalibrationData(cali_sram_buf, NULL, 6, 1, 7, CALI_DATA_LEN);
 	for (i = CALI_DATA_STABLE_LEN; i < CALI_DATA_LEN; i += 2) {
-		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ?
-			cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
+		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ? cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
 		c += cali_sram_buf[i];
 		if (atomic_read(&bio_trace) != 0)
-			pr_debug("[%d] = %d\n", i, cali_sram_buf[i]);
+			BIOMETRIC_LOG("[%d] = %d\n", i, cali_sram_buf[i]);
 	}
 	/* 4. PGA6 = (C - A) / ( B - A) */
 	/* 5. set PGA=1, AMBDAC(AMB phase) = 1, AMBDAC(LED phase) = 7 */
 	MT6381_GetCalibrationData(NULL, cali_sram_buf, 0, 1, 7, CALI_DATA_LEN);
 	for (i = CALI_DATA_STABLE_LEN; i < CALI_DATA_LEN; i += 2) {
-		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ?
-			cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
+		cali_sram_buf[i] = cali_sram_buf[i] >= 0x400000 ? cali_sram_buf[i] - 0x800000 : cali_sram_buf[i];
 		sumOfambdac += cali_sram_buf[i];
 		count++;
 		if (atomic_read(&bio_trace) != 0)
-			pr_debug("[%d] = %d\n", i, cali_sram_buf[i]);
+			BIOMETRIC_LOG("[%d] = %d\n", i, cali_sram_buf[i]);
 	}
 
 	kfree(cali_sram_buf);
@@ -2471,18 +2470,15 @@ static int MT6381_DoCalibration(struct biometric_cali *cali)
 	cali->pga6 = (c - a) * 1000 / (b - a);
 	cali->ambdac5_5 = sumOfambdac * -1000 / count;
 	if (atomic_read(&bio_trace) != 0) {
-		pr_debug("sumOfambdac = %lld, count = %d\n",
-			sumOfambdac, count);
-		pr_debug("pga6 = %d, ambdac5_5 = %d\n",
-			cali->pga6, cali->ambdac5_5);
+		BIOMETRIC_LOG("sumOfambdac = %lld, count = %d\n", sumOfambdac, count);
+		BIOMETRIC_LOG("pga6 = %d, ambdac5_5 = %d\n", cali->pga6, cali->ambdac5_5);
 	}
 	if (cali->pga6 < 6000 || cali->pga6 > 6060) {
-		pr_err("pga fail, %d is not between 6000~6060.\n", cali->pga6);
+		BIOMETRIC_PR_ERR("pga fail, %d is not between 6000~6060.\n", cali->pga6);
 		return -1;
 	}
 	if (cali->ambdac5_5 < 20957234 || cali->ambdac5_5 > 22296629) {
-		pr_err("ambdac fail, %d is not between 20957234~22296629.\n",
-			cali->ambdac5_5);
+		BIOMETRIC_PR_ERR("ambdac fail, %d is not between 20957234~22296629.\n", cali->ambdac5_5);
 		return -1;
 	}
 	return 0;
@@ -2495,8 +2491,7 @@ static int MT6381_WriteCalibration(struct biometric_cali *cali)
 	dc_offset = (long long)pga6 * (long long)ambdac5_5;
 	dc_offset += 500000;
 	do_div(dc_offset, 1000000);
-	pr_notice("pga6 = %d, ambdac5_5 = %d, dc_offset = %lld\n",
-		pga6, ambdac5_5, dc_offset);
+	pr_notice("pga6 = %d, ambdac5_5 = %d, dc_offset = %lld\n", pga6, ambdac5_5, dc_offset);
 	return 0;
 }
 
@@ -2519,8 +2514,7 @@ static int MT6381_ReadCalibration(struct biometric_cali *cali)
 	return 0;
 }
 
-static int MT6381_FtmReadSram(
-	enum vsm_sram_type_t sram_type, int32_t *data_buf, int len)
+static int MT6381_FtmReadSram(enum vsm_sram_type_t sram_type, int32_t *data_buf, int len)
 {
 	uint32_t temp;
 	uint32_t read_counter = 0;
@@ -2549,12 +2543,12 @@ static int MT6381_FtmReadSram(
 
 	sram_len =
 	    (write_counter >=
-	     read_counter) ? (write_counter - read_counter) :
-	     (VSM_SRAM_LEN - read_counter + write_counter);
+	     read_counter) ? (write_counter - read_counter) : (VSM_SRAM_LEN - read_counter +
+							       write_counter);
 	sram_len = ((sram_len % 2) == 0) ? sram_len : sram_len - 1;
 
 	if (sram_len < len) {
-		pr_err("data not ready\n");
+		BIOMETRIC_PR_ERR("data not ready\n");
 		return -1;
 	}
 
@@ -2564,7 +2558,7 @@ static int MT6381_FtmReadSram(
 	vsm_driver_set_read_counter(sram_type, &read_counter);
 	err = vsm_driver_read_register_batch(sram_type, (u8 *) data_buf, len);
 	if (err < 0) {
-		pr_err("vsm_driver_read_register_batch fail, %d\n", err);
+		BIOMETRIC_PR_ERR("vsm_driver_read_register_batch fail, %d\n", err);
 		return -1;
 	}
 
@@ -2602,14 +2596,11 @@ static int MT6381_GetTestData(struct biometric_test_data *data)
 
 	MT6381_FtmReadSram(VSM_SRAM_EKG, &(data->ekg), 1);
 
-	data->ppg_ir = data->ppg_ir >= 0x400000 ?
-		data->ppg_ir - 0x800000 : data->ppg_ir;
-	data->ppg_r  = data->ppg_r >= 0x400000 ?
-		data->ppg_r - 0x800000 : data->ppg_r;
+	data->ppg_ir = data->ppg_ir >= 0x400000 ? data->ppg_ir - 0x800000 : data->ppg_ir;
+	data->ppg_r  = data->ppg_r >= 0x400000 ? data->ppg_r - 0x800000 : data->ppg_r;
 	data->ekg = data->ekg >= 0x400000 ? data->ekg - 0x800000 : data->ekg;
 	if (atomic_read(&bio_trace) != 0)
-		pr_debug("%d, %d, %d\n",
-			data->ppg_ir, data->ppg_r, data->ekg);
+		BIOMETRIC_LOG("%d, %d, %d\n", data->ppg_ir, data->ppg_r, data->ekg);
 
 	return 0;
 }
@@ -2626,21 +2617,19 @@ int mt6381_enable_ekg(int en)
 {
 	enum vsm_status_t err = VSM_STATUS_OK;
 
-	pr_debug("%s en:%d\n", __func__, en);
+	BIOMETRIC_VER("%s en:%d\n", __func__, en);
 
 	mutex_lock(&op_lock);
 	if (en) {
 		if (offline_mode_en == false)
 			err = vsm_driver_set_signal(VSM_SIGNAL_EKG);
 		else
-			err = vsm_driver_set_signal_offline_mode(
-				VSM_SIGNAL_EKG);
+			err = vsm_driver_set_signal_offline_mode(VSM_SIGNAL_EKG);
 	} else {
 		if (offline_mode_en == false)
 			err = vsm_driver_disable_signal(VSM_SIGNAL_EKG);
 		else
-			err = vsm_driver_disable_signal_offline_mode(
-				VSM_SIGNAL_EKG);
+			err = vsm_driver_disable_signal_offline_mode(VSM_SIGNAL_EKG);
 	}
 	mutex_unlock(&op_lock);
 
@@ -2651,21 +2640,19 @@ int mt6381_enable_ppg1(int en)
 {
 	enum vsm_status_t err = VSM_STATUS_OK;
 
-	pr_debug("%s en:%d\n", __func__, en);
+	BIOMETRIC_VER("%s en:%d\n", __func__, en);
 
 	mutex_lock(&op_lock);
 	if (en) {
 		if (offline_mode_en == false)
 			err = vsm_driver_set_signal(VSM_SIGNAL_PPG1);
 		else
-			err = vsm_driver_set_signal_offline_mode(
-				VSM_SIGNAL_PPG1);
+			err = vsm_driver_set_signal_offline_mode(VSM_SIGNAL_PPG1);
 	} else {
 		if (offline_mode_en == false)
 			err = vsm_driver_disable_signal(VSM_SIGNAL_PPG1);
 		else
-			err = vsm_driver_disable_signal_offline_mode(
-				VSM_SIGNAL_PPG1);
+			err = vsm_driver_disable_signal_offline_mode(VSM_SIGNAL_PPG1);
 	}
 	mutex_unlock(&op_lock);
 
@@ -2676,51 +2663,42 @@ int mt6381_enable_ppg2(int en)
 {
 	enum vsm_status_t err = VSM_STATUS_OK;
 
-	pr_debug("%s en:%d\n", __func__, en);
+	BIOMETRIC_VER("%s en:%d\n", __func__, en);
 
 	mutex_lock(&op_lock);
 	if (en) {
 		if (offline_mode_en == false)
 			err = vsm_driver_set_signal(VSM_SIGNAL_PPG2);
 		else
-			err = vsm_driver_set_signal_offline_mode(
-				VSM_SIGNAL_PPG2);
+			err = vsm_driver_set_signal_offline_mode(VSM_SIGNAL_PPG2);
 	} else {
 		if (offline_mode_en == false)
 			err = vsm_driver_disable_signal(VSM_SIGNAL_PPG2);
 		else
-			err = vsm_driver_disable_signal_offline_mode(
-				VSM_SIGNAL_PPG2);
+			err = vsm_driver_disable_signal_offline_mode(VSM_SIGNAL_PPG2);
 	}
 	mutex_unlock(&op_lock);
 
 	return err;
 }
 
-int mt6381_set_delay(int flag, int64_t samplingPeriodNs,
-	int64_t maxBatchReportLatencyNs)
+int mt6381_set_delay(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
 {
 	return 0;
 }
 
-int mt6381_get_data_ekg(int *raw_data, int *amb_data,
-	int *agc_data, int8_t *status, u32 *length)
+int mt6381_get_data_ekg(int *raw_data, int *amb_data, int *agc_data, int8_t *status, u32 *length)
 {
 	int i;
 
 	if (offline_mode_en == true) {
 		mutex_lock(&op_lock);
-		vsm_driver_read_offline_mode_data(
-			VSM_SIGNAL_EKG, raw_data, length);
+		vsm_driver_read_offline_mode_data(VSM_SIGNAL_EKG, raw_data, length);
 		mutex_unlock(&op_lock);
 
 		for (i = 0; i < *length; i++) {
-			/* When finger is not ready,
-			 * ekg value should be saturated (0x3C0000).
-			 */
-			/* Set threshold to +/- 1000mV.
-			 * 1000 * (2 ^ 23) / 4000 = 2097152
-			 */
+			/* When finger is not ready, ekg value should be saturated (0x3C0000). */
+			/* Set threshold to +/- 1000mV. 1000 * (2 ^ 23) / 4000 = 2097152 */
 			if ((raw_data[i] > 2097152) || (raw_data[i] < -2097152))
 				status[i] = SENSOR_STATUS_UNRELIABLE;
 			else
@@ -2748,12 +2726,8 @@ int mt6381_get_data_ekg(int *raw_data, int *amb_data,
 			if (raw_data[i] >= 0x400000)
 				raw_data[i] = raw_data[i] - 0x800000;
 
-			/* When finger is not ready,
-			 * ekg value should be saturated (0x3C0000).
-			 */
-			/* Set threshold to +/- 1000mV.
-			 * 1000 * (2 ^ 23) / 4000 = 2097152
-			 */
+			/* When finger is not ready, ekg value should be saturated (0x3C0000). */
+			/* Set threshold to +/- 1000mV. 1000 * (2 ^ 23) / 4000 = 2097152 */
 			if ((raw_data[i] > 2097152) || (raw_data[i] < -2097152))
 				status[i] = SENSOR_STATUS_UNRELIABLE;
 			else
@@ -2765,25 +2739,19 @@ int mt6381_get_data_ekg(int *raw_data, int *amb_data,
 	return 0;
 }
 
-int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
-	int *agc_data, int8_t *status, u32 *length)
+int mt6381_get_data_ppg1(int *raw_data, int *amb_data, int *agc_data, int8_t *status, u32 *length)
 {
 	int i;
-	/* The sampling frequency of PPG input (Support 125Hz only). */
-	int32_t ppg_control_fs = 16;
-	/* The input configuration, default value is 1. */
-	int32_t ppg_control_cfg = 1;
-	/* The input source, default value is 1 (PPG channel 1). */
-	int32_t ppg_control_src = 1;
-	/* Input structure for the #ppg_control_process(). */
-	struct ppg_control_t ppg1_control_input;
+	int32_t ppg_control_fs = 16;            /* The sampling frequency of PPG input (Support 125Hz only). */
+	int32_t ppg_control_cfg = 1;             /* The input configuration, default value is 1. */
+	int32_t ppg_control_src = 1;             /* The input source, default value is 1 (PPG channel 1). */
+	struct ppg_control_t ppg1_control_input;           /* Input structure for the #ppg_control_process(). */
 	int64_t numOfSRAMPPG2Data;
 	u32 leddrv_con1;
 
 	if (offline_mode_en == true) {
 		mutex_lock(&op_lock);
-		vsm_driver_read_offline_mode_data(
-			VSM_SIGNAL_PPG1, raw_data, length);
+		vsm_driver_read_offline_mode_data(VSM_SIGNAL_PPG1, raw_data, length);
 		mutex_unlock(&op_lock);
 		for (i = 0; i < *length; i++) {
 			/* Only report finger on/off status by IR PPG */
@@ -2801,15 +2769,11 @@ int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
 	if (current_signal & VSM_SIGNAL_PPG1) {
 		mt6381_i2c_write_read(0x33, 0x2C, (u8 *)&leddrv_con1, 4);
 		/* PPG1 data is stored in sram ppg2 as well */
-		vsm_driver_read_sram(VSM_SRAM_PPG2,
-			temp_buf, amb_temp_buf, length);
+		vsm_driver_read_sram(VSM_SRAM_PPG2, temp_buf, amb_temp_buf, length);
 		for (i = 0; i < *length; i += 2) {
-			temp_buf[i] = temp_buf[i] >= 0x400000 ?
-				temp_buf[i] - 0x800000 : temp_buf[i];
-			temp_buf[i + 1] = temp_buf[i + 1] >= 0x400000 ?
-				temp_buf[i + 1] - 0x800000 : temp_buf[i + 1];
-			amb_temp_buf[i] = amb_temp_buf[i] >= 0x400000 ?
-				amb_temp_buf[i] - 0x800000 : amb_temp_buf[i];
+			temp_buf[i] = temp_buf[i] >= 0x400000 ? temp_buf[i] - 0x800000 : temp_buf[i];
+			temp_buf[i + 1] = temp_buf[i + 1] >= 0x400000 ? temp_buf[i + 1] - 0x800000 : temp_buf[i + 1];
+			amb_temp_buf[i] = amb_temp_buf[i] >= 0x400000 ? amb_temp_buf[i] - 0x800000 : amb_temp_buf[i];
 
 			if (ppg1_buf2_len < VSM_SRAM_LEN) {
 				ppg1_agc_buf[ppg1_buf2_len] = leddrv_con1;
@@ -2824,20 +2788,13 @@ int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
 
 			/* downsample to 16hz for AGC */
 			if ((numOfSRAMPPG2Data + i) % 64 == 0) {
-				if (agc_ppg1_buf_len <
-					ARRAY_SIZE(agc_ppg1_buf)) {
-					agc_ppg1_buf[agc_ppg1_buf_len] =
-						temp_buf[i];
-					agc_ppg1_amb_buf[agc_ppg1_buf_len++] =
-						amb_temp_buf[i];
+				if (agc_ppg1_buf_len < ARRAY_SIZE(agc_ppg1_buf)) {
+					agc_ppg1_buf[agc_ppg1_buf_len] = temp_buf[i];
+					agc_ppg1_amb_buf[agc_ppg1_buf_len++] = amb_temp_buf[i];
 				}
-				if (agc_ppg2_buf_len <
-					ARRAY_SIZE(agc_ppg2_buf)) {
-					agc_ppg2_buf[agc_ppg2_buf_len] =
-						temp_buf[i + 1];
-					/* use ppg1 amb data */
-					agc_ppg2_amb_buf[agc_ppg2_buf_len++] =
-						amb_temp_buf[i];
+				if (agc_ppg2_buf_len < ARRAY_SIZE(agc_ppg2_buf)) {
+					agc_ppg2_buf[agc_ppg2_buf_len] = temp_buf[i + 1];
+					agc_ppg2_amb_buf[agc_ppg2_buf_len++] = amb_temp_buf[i]; /* use ppg1 amb data */
 				}
 			}
 		}
@@ -2854,12 +2811,9 @@ int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
 	if (ppg1_buf2_len == VSM_SRAM_LEN)
 		aee_kernel_warning("MT6381", "PPG1 data dropped\n");
 	else if (ppg1_buf2_len > 0) {
-		memcpy(raw_data, ppg1_buf2,
-			ppg1_buf2_len * sizeof(ppg1_buf2[0]));
-		memcpy(amb_data, ppg1_amb_buf,
-			ppg1_buf2_len * sizeof(ppg1_buf2[0]));
-		memcpy(agc_data, ppg1_agc_buf,
-			ppg1_buf2_len * sizeof(ppg1_buf2[0]));
+		memcpy(raw_data, ppg1_buf2, ppg1_buf2_len * sizeof(ppg1_buf2[0]));
+		memcpy(amb_data, ppg1_amb_buf, ppg1_buf2_len * sizeof(ppg1_buf2[0]));
+		memcpy(agc_data, ppg1_agc_buf, ppg1_buf2_len * sizeof(ppg1_buf2[0]));
 
 		for (i = 0; i < ppg1_buf2_len; i++) {
 			/* Only report finger on/off status by IR PPG */
@@ -2889,8 +2843,7 @@ int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
 
 	if (atomic_read(&bio_trace) != 0)
 		for (i = 0; i < agc_ppg1_buf_len; i++)
-			pr_debug("ppg1 = %d, amb = %d\n",
-				agc_ppg1_buf[i], agc_ppg1_amb_buf[i]);
+			BIOMETRIC_LOG("ppg1 = %d, amb = %d\n", agc_ppg1_buf[i], agc_ppg1_amb_buf[i]);
 	ppg1_control_input.input = agc_ppg1_buf;
 	ppg1_control_input.input_amb = agc_ppg1_amb_buf;
 	ppg1_control_input.input_fs = ppg_control_fs;
@@ -2904,25 +2857,19 @@ int mt6381_get_data_ppg1(int *raw_data, int *amb_data,
 	return 0;
 }
 
-int mt6381_get_data_ppg2(int *raw_data, int *amb_data,
-	int *agc_data, int8_t *status, u32 *length)
+int mt6381_get_data_ppg2(int *raw_data, int *amb_data, int *agc_data, int8_t *status, u32 *length)
 {
 	int i;
-	/* The sampling frequency of PPG input (Support 125Hz only). */
-	int32_t ppg_control_fs = 16;
-	/* The input configuration, default value is 1. */
-	int32_t ppg_control_cfg = 1;
-	/* The input source, default value is 1 (PPG channel 1). */
-	int32_t ppg_control_src = 2;
-	/* Input structure for the #ppg_control_process(). */
-	struct ppg_control_t ppg1_control_input;
+	int32_t ppg_control_fs = 16;            /* The sampling frequency of PPG input (Support 125Hz only). */
+	int32_t ppg_control_cfg = 1;             /* The input configuration, default value is 1. */
+	int32_t ppg_control_src = 2;             /* The input source, default value is 1 (PPG channel 1). */
+	struct ppg_control_t ppg1_control_input;           /* Input structure for the #ppg_control_process(). */
 	int64_t numOfSRAMPPG2Data;
 	u32 leddrv_con1;
 
 	if (offline_mode_en == true) {
 		mutex_lock(&op_lock);
-		vsm_driver_read_offline_mode_data(
-			VSM_SIGNAL_PPG2, raw_data, length);
+		vsm_driver_read_offline_mode_data(VSM_SIGNAL_PPG2, raw_data, length);
 		mutex_unlock(&op_lock);
 		return 0;
 	}
@@ -2932,15 +2879,11 @@ int mt6381_get_data_ppg2(int *raw_data, int *amb_data,
 	/* avoid to accumulate numOfData[] */
 	if (current_signal & VSM_SIGNAL_PPG2) {
 		mt6381_i2c_write_read(0x33, 0x2C, (u8 *)&leddrv_con1, 4);
-		vsm_driver_read_sram(VSM_SRAM_PPG2,
-			temp_buf, amb_temp_buf, length);
+		vsm_driver_read_sram(VSM_SRAM_PPG2, temp_buf, amb_temp_buf, length);
 		for (i = 0; i < *length; i += 2) {
-			temp_buf[i] = temp_buf[i] >= 0x400000 ?
-				temp_buf[i] - 0x800000 : temp_buf[i];
-			temp_buf[i + 1] = temp_buf[i + 1] >= 0x400000 ?
-				temp_buf[i + 1] - 0x800000 : temp_buf[i + 1];
-			amb_temp_buf[i] = amb_temp_buf[i] >= 0x400000 ?
-				amb_temp_buf[i] - 0x800000 : amb_temp_buf[i];
+			temp_buf[i] = temp_buf[i] >= 0x400000 ? temp_buf[i] - 0x800000 : temp_buf[i];
+			temp_buf[i + 1] = temp_buf[i + 1] >= 0x400000 ? temp_buf[i + 1] - 0x800000 : temp_buf[i + 1];
+			amb_temp_buf[i] = amb_temp_buf[i] >= 0x400000 ? amb_temp_buf[i] - 0x800000 : amb_temp_buf[i];
 
 			if (ppg1_buf2_len < VSM_SRAM_LEN) {
 				ppg1_agc_buf[ppg1_buf2_len] = leddrv_con1;
@@ -2955,20 +2898,13 @@ int mt6381_get_data_ppg2(int *raw_data, int *amb_data,
 
 			/* downsample to 16hz for AGC */
 			if ((numOfSRAMPPG2Data + i) % 64 == 0) {
-				if (agc_ppg1_buf_len <
-					ARRAY_SIZE(agc_ppg1_buf)) {
-					agc_ppg1_buf[agc_ppg1_buf_len] =
-						temp_buf[i];
-					agc_ppg1_amb_buf[agc_ppg1_buf_len++] =
-						amb_temp_buf[i];
+				if (agc_ppg1_buf_len < ARRAY_SIZE(agc_ppg1_buf)) {
+					agc_ppg1_buf[agc_ppg1_buf_len] = temp_buf[i];
+					agc_ppg1_amb_buf[agc_ppg1_buf_len++] = amb_temp_buf[i];
 				}
-				if (agc_ppg2_buf_len <
-					ARRAY_SIZE(agc_ppg2_buf)) {
-					agc_ppg2_buf[agc_ppg2_buf_len] =
-						temp_buf[i + 1];
-					/* use ppg1 amb data */
-					agc_ppg2_amb_buf[agc_ppg2_buf_len++] =
-						amb_temp_buf[i];
+				if (agc_ppg2_buf_len < ARRAY_SIZE(agc_ppg2_buf)) {
+					agc_ppg2_buf[agc_ppg2_buf_len] = temp_buf[i + 1];
+					agc_ppg2_amb_buf[agc_ppg2_buf_len++] = amb_temp_buf[i]; /* use ppg1 amb data */
 				}
 			}
 		}
@@ -2985,12 +2921,9 @@ int mt6381_get_data_ppg2(int *raw_data, int *amb_data,
 	if (ppg2_buf2_len == VSM_SRAM_LEN)
 		aee_kernel_warning("MT6381", "PPG1 data dropped\n");
 	else if (ppg2_buf2_len > 0) {
-		memcpy(raw_data, ppg2_buf2,
-			ppg2_buf2_len * sizeof(ppg2_buf2[0]));
-		memcpy(amb_data, ppg2_amb_buf,
-			ppg2_buf2_len * sizeof(ppg2_buf2[0]));
-		memcpy(agc_data, ppg2_agc_buf,
-			ppg2_buf2_len * sizeof(ppg2_buf2[0]));
+		memcpy(raw_data, ppg2_buf2, ppg2_buf2_len * sizeof(ppg2_buf2[0]));
+		memcpy(amb_data, ppg2_amb_buf, ppg2_buf2_len * sizeof(ppg2_buf2[0]));
+		memcpy(agc_data, ppg2_agc_buf, ppg2_buf2_len * sizeof(ppg2_buf2[0]));
 
 		for (i = 0; i < ppg2_buf2_len; i++)
 			raw_data[i] += dc_offset;
@@ -3012,8 +2945,7 @@ int mt6381_get_data_ppg2(int *raw_data, int *amb_data,
 
 	if (atomic_read(&bio_trace) != 0)
 		for (i = 0; i < agc_ppg2_buf_len; i++)
-			pr_debug("ppg2 = %d, amb = %d\n",
-				agc_ppg2_buf[i], agc_ppg2_amb_buf[i]);
+			BIOMETRIC_LOG("ppg2 = %d, amb = %d\n", agc_ppg2_buf[i], agc_ppg2_amb_buf[i]);
 	ppg1_control_input.input = agc_ppg2_buf;
 	ppg1_control_input.input_amb = agc_ppg2_amb_buf;
 	ppg1_control_input.input_fs = ppg_control_fs;
@@ -3041,57 +2973,45 @@ static int pin_init(void)
 			pinctrl_gpios = devm_pinctrl_get(&pdev->dev);
 			if (IS_ERR(pinctrl_gpios)) {
 				ret = PTR_ERR(pinctrl_gpios);
-				pr_err("%s can't find mt6381 pinctrl\n",
-					__func__);
+				BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl\n", __func__);
 				return -1;
 			}
 		} else {
-			pr_err("%s platform device is null\n", __func__);
+			BIOMETRIC_PR_ERR("%s platform device is null\n", __func__);
 		}
 		/* it's normal that get "default" will failed */
-		bio_pins_default = pinctrl_lookup_state(
-			pinctrl_gpios, "default");
+		bio_pins_default = pinctrl_lookup_state(pinctrl_gpios, "default");
 		if (IS_ERR(bio_pins_default)) {
 			ret = PTR_ERR(bio_pins_default);
-			pr_err("%s can't find mt6381 pinctrl default\n",
-				__func__);
+			BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl default\n", __func__);
 			/* return ret; */
 		}
-		bio_pins_reset_high = pinctrl_lookup_state(
-			pinctrl_gpios, "reset_high");
+		bio_pins_reset_high = pinctrl_lookup_state(pinctrl_gpios, "reset_high");
 		if (IS_ERR(bio_pins_reset_high)) {
 			ret = PTR_ERR(bio_pins_reset_high);
-			pr_err("%s can't find mt6381 pinctrl reset_high\n",
-				__func__);
+			BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl reset_high\n", __func__);
 			return -1;
 		}
-		bio_pins_reset_low = pinctrl_lookup_state(
-			pinctrl_gpios, "reset_low");
+		bio_pins_reset_low = pinctrl_lookup_state(pinctrl_gpios, "reset_low");
 		if (IS_ERR(bio_pins_reset_low)) {
 			ret = PTR_ERR(bio_pins_reset_low);
-			pr_err("%s can't find mt6381 pinctrl reset_low\n",
-				__func__);
+			BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl reset_low\n", __func__);
 			return -1;
 		}
-		bio_pins_pwd_high = pinctrl_lookup_state(
-			pinctrl_gpios, "pwd_high");
+		bio_pins_pwd_high = pinctrl_lookup_state(pinctrl_gpios, "pwd_high");
 		if (IS_ERR(bio_pins_pwd_high)) {
 			ret = PTR_ERR(bio_pins_pwd_high);
-			pr_err("%s can't find mt6381 pinctrl pwd_high\n",
-				__func__);
+			BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl pwd_high\n", __func__);
 			return -1;
 		}
-		bio_pins_pwd_low = pinctrl_lookup_state(
-			pinctrl_gpios, "pwd_low");
+		bio_pins_pwd_low = pinctrl_lookup_state(pinctrl_gpios, "pwd_low");
 		if (IS_ERR(bio_pins_pwd_low)) {
 			ret = PTR_ERR(bio_pins_pwd_low);
-			pr_err("%s can't find mt6381 pinctrl pwd_low\n",
-				__func__);
+			BIOMETRIC_PR_ERR("%s can't find mt6381 pinctrl pwd_low\n", __func__);
 			return -1;
 		}
 	} else {
-		pr_err("Device Tree: can not find bio node!. %s\n",
-			"Go to use old cust info");
+		BIOMETRIC_PR_ERR("Device Tree: can not find bio node!. Go to use old cust info\n");
 		return -1;
 	}
 
@@ -3099,22 +3019,21 @@ static int pin_init(void)
 }
 
 
-/**********************************************************************
+/******************************************************************************
  * Function Configuration
- **********************************************************************/
+******************************************************************************/
 static int mt6381_open(struct inode *inode, struct file *file)
 {
 	return nonseekable_open(inode, file);
 }
-/*-------------------------------------------------------------------*/
+/*----------------------------------------------------------------------------*/
 static int mt6381_release(struct inode *inode, struct file *file)
 {
 	file->private_data = NULL;
 	return 0;
 }
-/*-------------------------------------------------------------------*/
-static long mt6381_unlocked_ioctl(struct file *file,
-	unsigned int cmd, unsigned long arg)
+/*----------------------------------------------------------------------------*/
+static long mt6381_unlocked_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	void __user *data;
 	struct biometric_cali sensor_data;
@@ -3123,15 +3042,12 @@ static long mt6381_unlocked_ioctl(struct file *file,
 	int err = 0;
 
 	if (_IOC_DIR(cmd) & _IOC_READ)
-		err = !access_ok(VERIFY_WRITE,
-			(void __user *)arg, _IOC_SIZE(cmd));
+		err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
 	else if (_IOC_DIR(cmd) & _IOC_WRITE)
-		err = !access_ok(VERIFY_READ,
-			(void __user *)arg, _IOC_SIZE(cmd));
+		err = !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
 
 	if (err) {
-		pr_err("access error: %08X, (%2d, %2d)\n",
-			cmd, _IOC_DIR(cmd), _IOC_SIZE(cmd));
+		BIOMETRIC_PR_ERR("access error: %08X, (%2d, %2d)\n", cmd, _IOC_DIR(cmd), _IOC_SIZE(cmd));
 		return -EFAULT;
 	}
 
@@ -3218,7 +3134,7 @@ static long mt6381_unlocked_ioctl(struct file *file,
 		}
 		break;
 	default:
-		pr_err("unknown IOCTL: 0x%08x\n", cmd);
+		BIOMETRIC_PR_ERR("unknown IOCTL: 0x%08x\n", cmd);
 		err = -ENOIOCTLCMD;
 		break;
 	}
@@ -3226,8 +3142,7 @@ static long mt6381_unlocked_ioctl(struct file *file,
 	return err;
 }
 #ifdef CONFIG_COMPAT
-static long mt6381_compat_ioctl(struct file *file,
-	unsigned int cmd, unsigned long arg)
+static long mt6381_compat_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	long err = 0;
 
@@ -3238,44 +3153,34 @@ static long mt6381_compat_ioctl(struct file *file,
 
 	switch (cmd) {
 	case COMPAT_BIOMETRIC_IOCTL_INIT:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_INIT, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_INIT, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_DO_CALI:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_DO_CALI, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_DO_CALI, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_SET_CALI:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_SET_CALI, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_SET_CALI, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_GET_CALI:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_GET_CALI, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_GET_CALI, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_CLR_CALI:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_CLR_CALI, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_CLR_CALI, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_FTM_START:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_FTM_START, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_FTM_START, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_FTM_END:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_FTM_END, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_FTM_END, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_FTM_GET_DATA:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_FTM_GET_DATA, (unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_FTM_GET_DATA, (unsigned long)arg32);
 		break;
 	case COMPAT_BIOMETRIC_IOCTL_FTM_GET_THRESHOLD:
-		err = file->f_op->unlocked_ioctl(file,
-			BIOMETRIC_IOCTL_FTM_GET_THRESHOLD,
-			(unsigned long)arg32);
+		err = file->f_op->unlocked_ioctl(file, BIOMETRIC_IOCTL_FTM_GET_THRESHOLD, (unsigned long)arg32);
 		break;
 	default:
-		pr_err("unknown IOCTL: 0x%08x\n", cmd);
+		BIOMETRIC_PR_ERR("unknown IOCTL: 0x%08x\n", cmd);
 		err = -ENOIOCTLCMD;
 		break;
 	}
@@ -3301,8 +3206,7 @@ static struct miscdevice mt6381_device = {
 	.fops = &mt6381_fops,
 };
 
-static int mt6381_i2c_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
+static int mt6381_i2c_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	int err = 0;
 	struct biometric_control_path ctl = { 0 };
@@ -3310,9 +3214,8 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 	u32 chip_id;
 
 	mt6381_i2c_client = client;
-	mt6381_i2c_write_read(mt6381_i2c_client->addr,
-		0xac, (u8 *) &chip_id, 4);
-	pr_debug("bio sensor inited. chip_id:%x\n", chip_id);
+	mt6381_i2c_write_read(mt6381_i2c_client->addr, 0xac, (u8 *) &chip_id, 4);
+	BIOMETRIC_VER("bio sensor inited. chip_id:%x\n", chip_id);
 	if (chip_id != 0x25110000)
 		goto exit;
 
@@ -3320,20 +3223,19 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 
 	err = misc_register(&mt6381_device);
 	if (err) {
-		pr_err("mt6381_device misc register failed!\n");
+		BIOMETRIC_PR_ERR("mt6381_device misc register failed!\n");
 		goto exit_misc_device_register_failed;
 	}
 
-	err = mt6381_create_attr(
-		&(mt6381_init_info.platform_diver_addr->driver));
+	err = mt6381_create_attr(&(mt6381_init_info.platform_diver_addr->driver)/*client->dev.driver*/);
 	if (err) {
-		pr_err("create attribute err = %d\n", err);
+		BIOMETRIC_PR_ERR("create attribute err = %d\n", err);
 		goto exit_create_attr_failed;
 	}
 
 	err = pin_init();
 	if (err) {
-		pr_err("pin_init fail\n");
+		BIOMETRIC_PR_ERR("pin_init fail\n");
 		goto exit_create_attr_failed;
 	}
 
@@ -3342,7 +3244,7 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 	mutex_init(&op_lock);
 	ppg1_buf2_len = 0;
 	ppg2_buf2_len = 0;
-	mod_ary_len = 0;
+	modify_array_len = 0;
 	new_init_array_len = 0;
 	set_AFE_TCTRL_CON2 = 0;
 	set_AFE_TCTRL_CON3 = 0;
@@ -3354,13 +3256,13 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 	ppg1_led_status = false;
 	ppg2_led_status = false;
 	inCali = false;
-	pr_debug("AGC version: %x\n", ppg_control_get_version());
+	BIOMETRIC_LOG("AGC version: %x\n", ppg_control_get_version());
 
 	ctl.open_report_data = mt6381_enable_ekg;
 	ctl.batch = mt6381_set_delay;
 	err = biometric_register_control_path(&ctl, ID_EKG);
 	if (err) {
-		pr_err("register bio control path err\n");
+		BIOMETRIC_PR_ERR("register bio control path err\n");
 		goto exit_create_attr_failed;
 	}
 
@@ -3368,7 +3270,7 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 	ctl.batch = mt6381_set_delay;
 	err = biometric_register_control_path(&ctl, ID_PPG1);
 	if (err) {
-		pr_err("register bio control path err\n");
+		BIOMETRIC_PR_ERR("register bio control path err\n");
 		goto exit_create_attr_failed;
 	}
 
@@ -3376,28 +3278,28 @@ static int mt6381_i2c_probe(struct i2c_client *client,
 	ctl.batch = mt6381_set_delay;
 	err = biometric_register_control_path(&ctl, ID_PPG2);
 	if (err) {
-		pr_err("register bio control path err\n");
+		BIOMETRIC_PR_ERR("register bio control path err\n");
 		goto exit_create_attr_failed;
 	}
 
 	data.get_data = mt6381_get_data_ekg;
 	err = biometric_register_data_path(&data, ID_EKG);
 	if (err) {
-		pr_err("register bio data path err\n");
+		BIOMETRIC_PR_ERR("register bio data path err\n");
 		goto exit_create_attr_failed;
 	}
 
 	data.get_data = mt6381_get_data_ppg1;
 	err = biometric_register_data_path(&data, ID_PPG1);
 	if (err) {
-		pr_err("register bio data path err\n");
+		BIOMETRIC_PR_ERR("register bio data path err\n");
 		goto exit_create_attr_failed;
 	}
 
 	data.get_data = mt6381_get_data_ppg2;
 	err = biometric_register_data_path(&data, ID_PPG2);
 	if (err) {
-		pr_err("register bio data path err\n");
+		BIOMETRIC_PR_ERR("register bio data path err\n");
 		goto exit_create_attr_failed;
 	}
 
@@ -3431,20 +3333,19 @@ static struct i2c_driver mt6381_i2c_driver = {
 		   .pm = &lsm6ds3h_pm_ops,
 #endif
 #ifdef CONFIG_OF
-			/* need add in dtsi first */
-			.of_match_table = biometric_of_match,
+		   .of_match_table = biometric_of_match,	/* need add in dtsi first */
 #endif
-	},
+		   },
 };
 
 static int mt6381_local_init(void)
 {
 	if (i2c_add_driver(&mt6381_i2c_driver)) {
-		pr_err("add driver error\n");
+		BIOMETRIC_PR_ERR("add driver error\n");
 		return -1;
 	}
 	if (biosensor_init_flag == -1) {
-		pr_err("%s init failed!\n", __func__);
+		BIOMETRIC_PR_ERR("%s init failed!\n", __func__);
 		return -1;
 	}
 	return 0;

@@ -1,19 +1,15 @@
 /* linearaccityhub motion sensor driver
  *
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * This software is licensed under the terms of the GNU General Public
+ * License version 2, as published by the Free Software Foundation, and
+ * may be copied, distributed, and modified under those terms.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
  */
-
-#define pr_fmt(fmt) "[rotatvechub] " fmt
-
 #include <hwmsensor.h>
 #include "fusion.h"
 #include "rotatvechub.h"
@@ -21,25 +17,31 @@
 #include <linux/notifier.h>
 #include "scp_helper.h"
 
+#define ROTVEC_TAG                  "[rotatvechub] "
+#define ROTVEC_FUN(f)               pr_debug(ROTVEC_TAG"%s\n", __func__)
+#define ROTVEC_PR_ERR(fmt, args...)    pr_err(ROTVEC_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
+#define ROTVEC_LOG(fmt, args...)    pr_debug(ROTVEC_TAG fmt, ##args)
+
 typedef enum {
 	ROTVECHUB_TRC_INFO = 0X10,
 } ROTVECHUB_TRC;
 
 static struct fusion_init_info rotatvechub_init_info;
 
-static int rotatvec_get_data(int *x, int *y, int *z,
-	int *scalar, int *status)
+static int rotatvec_get_data(int *x, int *y, int *z, int *scalar, int *status)
 {
 	int err = 0;
 	struct data_unit_t data;
 	uint64_t time_stamp = 0;
+	uint64_t time_stamp_gpt = 0;
 
 	err = sensor_get_data_from_hub(ID_ROTATION_VECTOR, &data);
 	if (err < 0) {
-		pr_err("sensor_get_data_from_hub fail!!\n");
+		ROTVEC_PR_ERR("sensor_get_data_from_hub fail!!\n");
 		return -1;
 	}
 	time_stamp = data.time_stamp;
+	time_stamp_gpt = data.time_stamp_gpt;
 	*x = data.orientation_t.azimuth;
 	*y = data.orientation_t.pitch;
 	*z = data.orientation_t.roll;
@@ -71,14 +73,12 @@ static int rotatvec_set_delay(u64 delay)
 	return 0;
 #endif
 }
-static int rotatvec_batch(int flag,
-	int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
+static int rotatvec_batch(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs)
 {
 #if defined CONFIG_MTK_SCP_SENSORHUB_V1
 	rotatvec_set_delay(samplingPeriodNs);
 #endif
-	return sensor_batch_to_hub(ID_ROTATION_VECTOR,
-		flag, samplingPeriodNs, maxBatchReportLatencyNs);
+	return sensor_batch_to_hub(ID_ROTATION_VECTOR, flag, samplingPeriodNs, maxBatchReportLatencyNs);
 }
 
 static int rotatvec_flush(void)
@@ -90,11 +90,9 @@ static int rotatvec_recv_data(struct data_unit_t *event, void *reserved)
 	int err = 0;
 
 	if (event->flush_action == DATA_ACTION)
-		err = rv_data_report(event->orientation_t.azimuth,
-			event->orientation_t.pitch,
-			event->orientation_t.roll, event->orientation_t.scalar,
-			event->orientation_t.status,
-			(int64_t)event->time_stamp);
+		err = rv_data_report(event->orientation_t.azimuth, event->orientation_t.pitch,
+			event->orientation_t.roll, event->orientation_t.scalar, event->orientation_t.status,
+			(int64_t)(event->time_stamp + event->time_stamp_gpt));
 	else if (event->flush_action == FLUSH_ACTION)
 		err = rv_flush_report();
 
@@ -121,7 +119,7 @@ static int rotatvechub_local_init(void)
 #endif
 	err = fusion_register_control_path(&ctl, ID_ROTATION_VECTOR);
 	if (err) {
-		pr_err("register rotatvec control path err\n");
+		ROTVEC_PR_ERR("register rotatvec control path err\n");
 		goto exit;
 	}
 
@@ -129,13 +127,12 @@ static int rotatvechub_local_init(void)
 	data.vender_div = 1000000;
 	err = fusion_register_data_path(&data, ID_ROTATION_VECTOR);
 	if (err) {
-		pr_err("register rotatvec data path err\n");
+		ROTVEC_PR_ERR("register rotatvec data path err\n");
 		goto exit;
 	}
-	err = scp_sensorHub_data_registration(ID_ROTATION_VECTOR,
-		rotatvec_recv_data);
+	err = scp_sensorHub_data_registration(ID_ROTATION_VECTOR, rotatvec_recv_data);
 	if (err < 0) {
-		pr_err("SCP_sensorHub_data_registration failed\n");
+		ROTVEC_PR_ERR("SCP_sensorHub_data_registration failed\n");
 		goto exit;
 	}
 	return 0;
@@ -162,7 +159,7 @@ static int __init rotatvechub_init(void)
 
 static void __exit rotatvechub_exit(void)
 {
-	pr_debug("%s\n", __func__);
+	ROTVEC_FUN();
 }
 
 module_init(rotatvechub_init);

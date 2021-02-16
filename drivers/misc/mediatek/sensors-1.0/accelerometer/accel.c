@@ -251,8 +251,7 @@ static int acc_enable_and_batch(void)
 		pr_debug("ACC power on done\n");
 	}
 	/* rate change */
-	//if (cxt->power == 1 && cxt->delay_ns >= 0) {
-	if (cxt->power == 1) {
+	if (cxt->power == 1 && cxt->delay_ns >= 0) {
 		pr_debug("ACC set batch\n");
 		/* set ODR, fifo timeout latency */
 		if (cxt->acc_ctl.is_support_batch)
@@ -268,7 +267,7 @@ static int acc_enable_and_batch(void)
 		/* start polling, if needed */
 		if (cxt->is_active_data == true &&
 		    cxt->acc_ctl.is_report_input_direct == false) {
-			unsigned long long mdelay = cxt->delay_ns;
+			int mdelay = cxt->delay_ns;
 
 			do_div(mdelay, 1000000);
 			atomic_set(&cxt->delay, mdelay);
@@ -402,18 +401,13 @@ static ssize_t acc_store_batch(struct device *dev,
 {
 	struct acc_context *cxt = acc_context_obj;
 	int handle = 0, flag = 0, err = 0;
-	int64_t delay_ns;
+
 	pr_debug(" acc_store_batch %s\n", buf);
-	err = sscanf(buf, "%d,%d,%lld,%lld", &handle, &flag, &delay_ns,
+	err = sscanf(buf, "%d,%d,%lld,%lld", &handle, &flag, &cxt->delay_ns,
 		     &cxt->latency_ns);
 	if (err != 4) {
 		pr_err("acc_store_batch param error: err = %d\n", err);
 		return -1;
-	} else {
-		if (delay_ns > 0)
-			cxt->delay_ns = delay_ns;
-		else
-			cxt->delay_ns = 10000000;
 	}
 
 	mutex_lock(&acc_context_obj->acc_op_mutex);

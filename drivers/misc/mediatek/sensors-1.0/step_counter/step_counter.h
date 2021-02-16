@@ -16,7 +16,7 @@
 #define __STEP_C_H__
 
 
-//#include <linux/pm_wakeup.h>
+#include <linux/wakelock.h>
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/workqueue.h>
@@ -36,6 +36,14 @@
 #include <linux/poll.h>
 #include "sensor_attr.h"
 #include "sensor_event.h"
+
+
+
+#define STEP_C_TAG					"<STEP_COUNTER> "
+#define STEP_C_FUN(f)				pr_debug(STEP_C_TAG"%s\n", __func__)
+#define STEP_C_PR_ERR(fmt, args...)	pr_err(STEP_C_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
+#define STEP_C_LOG(fmt, args...)	pr_debug(STEP_C_TAG fmt, ##args)
+#define STEP_C_VER(fmt, args...)	pr_debug(STEP_C_TAG"%s: "fmt, __func__, ##args) /* ((void)0) */
 
 #define	OP_STEP_C_DELAY		0X01
 #define	OP_STEP_C_ENABLE		0X02
@@ -69,23 +77,19 @@ struct step_c_control_path {
 	int (*step_c_set_delay)(u64 delay);
 	int (*step_d_set_delay)(u64 delay);
 	int (*floor_c_set_delay)(u64 delay);
-	int (*step_c_batch)(int flag,
-		int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
+	int (*step_c_batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*step_c_flush)(void);/* open data rerport to HAL */
-	int (*step_d_batch)(int flag,
-		int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
+	int (*step_d_batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*step_d_flush)(void);/* open data rerport to HAL */
-	int (*smd_batch)(int flag,
-		int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
+	int (*smd_batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*smd_flush)(void);/* open data rerport to HAL */
-	int (*floor_c_batch)(int flag,
-		int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
+	int (*floor_c_batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*floor_c_flush)(void);/* open data rerport to HAL */
 	bool is_report_input_direct;
-	bool is_counter_support_batch;/* version2. batch M support flag */
-	bool is_detector_support_batch;/* version2. batch M support flag */
-	bool is_smd_support_batch;/* version2. batch M support flag */
-	bool is_floor_c_support_batch;/* version2. batch M support flag */
+	bool is_counter_support_batch;/* version2.used for batch mode support flag */
+	bool is_detector_support_batch;/* version2.used for batch mode support flag */
+	bool is_smd_support_batch;/* version2.used for batch mode support flag */
+	bool is_floor_c_support_batch;/* version2.used for batch mode support flag */
 };
 
 struct step_c_data_path {
@@ -115,8 +119,8 @@ struct step_c_data {
 struct step_c_drv_obj {
 	void *self;
 	int polling;
-	int (*step_c_operate)(void *self, uint32_t command, void *buff_in,
-		int size_in, void *buff_out, int size_out, int *actualout);
+	int (*step_c_operate)(void *self, uint32_t command, void *buff_in, int size_in,
+		void *buff_out, int size_out, int *actualout);
 };
 
 struct step_c_context {
@@ -124,8 +128,8 @@ struct step_c_context {
 	struct sensor_attr_t   mdev;
 	struct work_struct  report;
 	struct mutex step_c_op_mutex;
-	atomic_t delay; /*polling period for reporting input event*/
-	atomic_t wake;  /*user-space request to wake-up, used with stop*/
+	atomic_t            delay; /*polling period for reporting input event*/
+	atomic_t            wake;  /*user-space request to wake-up, used with stop*/
 	struct timer_list   timer;  /* polling timer */
 	atomic_t            trace;
 
@@ -134,15 +138,15 @@ struct step_c_context {
 	struct step_c_data       drv_data;
 	struct step_c_control_path   step_c_ctl;
 	struct step_c_data_path   step_c_data;
-	bool is_active_nodata;
-	bool is_active_data;		/* Active and HAL need */
-	bool is_floor_c_active_data;	/* Active and HAL need */
-	bool is_first_data_after_enable;
-	bool is_first_floor_c_data_after_enable;
-	bool is_polling_run;
-	bool is_step_c_batch_enable;	/* v2. judge whether sensor in batch M*/
-	bool is_step_d_batch_enable;	/* v2. judge whether sensor in batch M*/
-	bool is_floor_c_batch_enable;   /* v2. judge whether sensor in batch M*/
+	bool			is_active_nodata;
+	bool			is_active_data;		/* Active and HAL need data . */
+	bool			is_floor_c_active_data;		/* Active and HAL need data . */
+	bool		is_first_data_after_enable;
+	bool		is_first_floor_c_data_after_enable;
+	bool		is_polling_run;
+	bool		is_step_c_batch_enable;	/* version2.this is used for judging whether sensor is in batch mode */
+	bool		is_step_d_batch_enable;	/* version2.this is used for judging whether sensor is in batch mode */
+	bool		is_floor_c_batch_enable;	/* version2.used for judging whether sensor is in batch mode */
 };
 
 /* for auto detect */

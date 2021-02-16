@@ -1,20 +1,21 @@
 /*
- * Copyright (C) 2016 MediaTek Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
- * See http://www.gnu.org/licenses/gpl-2.0.html for more details.
- */
+* Copyright (C) 2016 MediaTek Inc.
+*
+* This program is free software; you can redistribute it and/or modify
+* it under the terms of the GNU General Public License version 2 as
+* published by the Free Software Foundation.
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+* See http://www.gnu.org/licenses/gpl-2.0.html for more details.
+*/
 
 #ifndef __BIOMETRIC_H__
 #define __BIOMETRIC_H__
 
 
+#include <linux/wakelock.h>
 #include <linux/interrupt.h>
 #include <linux/miscdevice.h>
 #include <linux/platform_device.h>
@@ -31,6 +32,12 @@
 #include <linux/i2c.h>
 #include <sensors_io.h>
 
+#define BIOMETRIC_TAG		            "<BIOMETRIC> "
+#define BIOMETRIC_FUN(f)		        pr_debug(BIOMETRIC_TAG"%s\n", __func__)
+#define BIOMETRIC_PR_ERR(fmt, args...)		pr_err(BIOMETRIC_TAG"%s %d : "fmt, __func__, __LINE__, ##args)
+#define BIOMETRIC_LOG(fmt, args...)		pr_debug(BIOMETRIC_TAG fmt, ##args)
+#define BIOMETRIC_VER(fmt, args...)		pr_debug(BIOMETRIC_TAG"%s: "fmt, __func__, ##args)
+
 enum {
 	ekg = 0,
 	ppg1,
@@ -40,15 +47,13 @@ enum {
 
 struct biometric_control_path {
 	int (*open_report_data)(int open);
-	int (*batch)(int flag, int64_t samplingPeriodNs,
-		int64_t maxBatchReportLatencyNs);
+	int (*batch)(int flag, int64_t samplingPeriodNs, int64_t maxBatchReportLatencyNs);
 	int (*flush)(void);
 	bool is_support_batch;
 };
 
 struct biometric_data_path {
-	int (*get_data)(int *raw_data, int *amb_data,
-		int *agc_data, int8_t *status, u32 *length);
+	int (*get_data)(int *raw_data, int *amb_data, int *agc_data, int8_t *status, u32 *length);
 };
 
 struct biometric_init_info {
@@ -79,16 +84,13 @@ struct biometric_data_control_context {
 struct biometric_context {
 	struct sensor_attr_t mdev;
 	struct mutex biometric_op_mutex;
-	struct biometric_data_control_context
-		ctl_context[max_biometric_support];
+	struct biometric_data_control_context ctl_context[max_biometric_support];
 };
 
 extern int biometric_data_report(int handle);
 extern int biometric_flush_report(int handle);
 extern int biometric_driver_add(struct biometric_init_info *obj, int handle);
-extern int biometric_register_control_path(struct biometric_control_path *ctl,
-					    int handle);
-extern int biometric_register_data_path(struct biometric_data_path *data,
-					 int handle);
+extern int biometric_register_control_path(struct biometric_control_path *ctl, int handle);
+extern int biometric_register_data_path(struct biometric_data_path *data, int handle);
 
 #endif

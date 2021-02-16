@@ -71,6 +71,12 @@
 #define MAX_CHOOSE_GYRO_NUM 5
 #define GYRO_AXES_NUM 3
 
+#define GYRO_TAG					"<GYROSCOPE> "
+#define GYRO_FUN(f)				pr_debug(GYRO_TAG"%s\n", __func__)
+#define GYRO_PR_ERR(fmt, args...)	pr_err(GYRO_TAG fmt, ##args)
+#define GYRO_LOG(fmt, args...)	pr_debug(GYRO_TAG fmt, ##args)
+#define GYRO_VER(fmt, args...)  pr_debug(GYRO_TAG fmt, ##args)
+
 struct gyro_control_path {
 	int (*open_report_data)(int open);
 	int (*enable_nodata)(int en);
