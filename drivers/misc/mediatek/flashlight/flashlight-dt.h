@@ -30,5 +30,10 @@
 #define RT4505_DTNAME     "mediatek,flashlights_rt4505"
 #define RT4505_DTNAME_I2C "mediatek,strobe_main"
 #define RT5081_DTNAME     "mediatek,flashlights_rt5081"
-
+/*aquaris a4_5/m4_5 flashlights*/
+#define BD7710_DTNAME     "mediatek,flashlights_bd7710"
+#define BD7710_DTNAME_I2C "mediatek,bd7710"
+#define BD7710_FRONT_DTNAME "mediatek,flashlights_bd7710_front"
+#define BD7710_FRONT_DTNAME_I2C "mediatek,bd7710"
+/*aquaris a4_5/m4_5 flashlights*/
 #endif /* _FLASHLIGHT_DT_H */

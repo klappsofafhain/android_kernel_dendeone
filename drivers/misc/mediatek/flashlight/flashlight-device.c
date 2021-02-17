@@ -97,9 +97,9 @@
 #else
 	const struct flashlight_device_id flashlight_id[] = {
 		/* {TYPE, CT, PART, "NAME", CHANNEL, DECOUPLE} */
-		{0, 0, 0, "flashlights-none", -1, 0},
-		{0, 1, 0, "flashlights-none", -1, 0},
-		{1, 0, 0, "flashlights-none", -1, 0},
+		{0, 0, 0, "flashlights-bd7710", 0, 0}, //rearLED1
+	    {0, 1, 0, "flashlights-bd7710", 1, 0}, //rearLED2
+		{1, 0, 0, "flashlights-bd7710_front", 2, 0}, //frontLED
 		{1, 1, 0, "flashlights-none", -1, 0},
 		{0, 0, 1, "flashlights-none", -1, 0},
 		{0, 1, 1, "flashlights-none", -1, 0},

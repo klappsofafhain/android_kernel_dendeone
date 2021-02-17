@@ -17,6 +17,10 @@ obj-$(CONFIG_MTK_FLASHLIGHT_MT6336)      += flashlights-mt6336.o
 obj-$(CONFIG_MTK_FLASHLIGHT_MT6370)      += flashlights-mt6370.o
 obj-$(CONFIG_MTK_FLASHLIGHT_DUMMY)       += flashlights-dummy.o
 obj-$(CONFIG_MTK_FLASHLIGHT_DUMMY_GPIO)  += flashlights-dummy-gpio.o
+#aquaris a4_5/m4_5 flashlights#
+obj-$(CONFIG_MTK_FLASHLIGHT_BD7710)       += flashlights-bd7710.o
+obj-$(CONFIG_MTK_FLASHLIGHT_BD7710_FRONT) += flashlights-bd7710-front.o
+#//aquaris a4_5/m4_5 flashlights//#
 
 ccflags-$(CONFIG_MTK_FLASHLIGHT_DEBUG)     := -DDEBUG
 ccflags-$(CONFIG_MTK_FLASHLIGHT_PT)        += -DCONFIG_MTK_FLASHLIGHT_PT
