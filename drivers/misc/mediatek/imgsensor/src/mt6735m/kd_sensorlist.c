@@ -59,14 +59,6 @@
 #include <linux/regulator/consumer.h>
 #endif /* !defined(CONFIG_MTK_LEGACY) */
 
-// add for BBS log++
-#define FIHBBS
-#ifdef FIHBBS
-#include "fihBBS/fih_camera_bbs.h"
-extern void fih_bbs_camera_msg_by_addr(int, int);
-int g_SensorFound =0;
-#endif
-// add for BBS log--
 /* Camera information */
 #define PROC_CAMERA_INFO "driver/camera_info"
 #define camera_info_size 128
@@ -397,17 +389,6 @@ int iReadReg(u16 a_u2Addr, u8 *a_puBuff, u16 i2cId)
 int iReadRegI2C(u8 *a_pSendData , u16 a_sizeSendData, u8 *a_pRecvData, u16 a_sizeRecvData, u16 i2cId)
 {
 	int i4RetValue = 0;
-/*
-//test tmp
-// add for BBS log++
-			#ifdef FIHBBS
-			PK_ERR("[MIMI CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-			fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_READ);
-			#endif
-			// add for BBS log--
-//test tmp
-*/
-
 	if (gI2CBusNum == SUPPORT_I2C_BUS_NUM1) {
 		spin_lock(&kdsensor_drv_lock);
 		g_pstI2Cclient->addr = (i2cId >> 1);
@@ -425,32 +406,12 @@ int iReadRegI2C(u8 *a_pSendData , u16 a_sizeSendData, u8 *a_pRecvData, u16 a_siz
 		i4RetValue = i2c_master_send(g_pstI2Cclient, a_pSendData, a_sizeSendData);
 		if (i4RetValue != a_sizeSendData) {
 			PK_ERR("[CAMERA SENSOR] I2C send failed!!, Addr = 0x%x\n", a_pSendData[0]);
-			// add for BBS log++
-			#ifdef FIHBBS
-			if(!g_IsSearchSensor){
-				if(!g_SensorFound){
-					PK_ERR("[CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-					fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_WRITE);
-				}
-			}
-			#endif
-			// add for BBS log--
 			return -1;
 		}
 
 		i4RetValue = i2c_master_recv(g_pstI2Cclient, (char *)a_pRecvData, a_sizeRecvData);
 		if (i4RetValue != a_sizeRecvData) {
 			PK_ERR("[CAMERA SENSOR] I2C read failed!!\n");
-			// add for BBS log++
-			#ifdef FIHBBS
-			if(!g_IsSearchSensor){
-				if(!g_SensorFound){
-					PK_ERR("[CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-					fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_READ);
-				}
-			}
-			#endif
-			// add for BBS log--
 			return -1;
 		}
 	} else {
@@ -468,32 +429,12 @@ int iReadRegI2C(u8 *a_pSendData , u16 a_sizeSendData, u8 *a_pRecvData, u16 a_siz
 		i4RetValue = i2c_master_send(g_pstI2Cclient2, a_pSendData, a_sizeSendData);
 		if (i4RetValue != a_sizeSendData) {
 			PK_ERR("[CAMERA SENSOR] I2C send failed!!, Addr = 0x%x\n", a_pSendData[0]);
-			// add for BBS log++
-			#ifdef FIHBBS
-			if(!g_IsSearchSensor){
-				if(!g_SensorFound){
-					PK_ERR("[CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-					fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_WRITE);
-				}
-			}
-			#endif
-			// add for BBS log--
 			return -1;
 		}
 
 		i4RetValue = i2c_master_recv(g_pstI2Cclient2, (char *)a_pRecvData, a_sizeRecvData);
 		if (i4RetValue != a_sizeRecvData) {
 			PK_ERR("[CAMERA SENSOR] I2C read failed!!\n");
-			// add for BBS log++
-			#ifdef FIHBBS
-			if(!g_IsSearchSensor){
-				if(!g_SensorFound){
-					PK_ERR("[CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-					fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_READ);
-				}
-			}
-			#endif
-			// add for BBS log--
 			return -1;
 		}
 	}
@@ -839,16 +780,6 @@ int iWriteRegI2C(u8 *a_pSendData, u16 a_sizeSendData, u16 i2cId)
 {
 	int i4RetValue = 0;
 	int retry = 3;
-/*
-//test tmp
-// add for BBS log++
-			#ifdef FIHBBS
-			PK_ERR("[MIMI CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-			fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_WRITE);
-			#endif
-			// add for BBS log--
-//test tmp
-*/
 /* PK_DBG("Addr : 0x%x,Val : 0x%x\n",a_u2Addr,a_u4Data); */
 
 	/* KD_IMGSENSOR_PROFILE_INIT(); */
@@ -872,16 +803,6 @@ int iWriteRegI2C(u8 *a_pSendData, u16 a_sizeSendData, u16 i2cId)
 		if (i4RetValue != a_sizeSendData) {
 			PK_DBG("[CAMERA SENSOR] I2C send failed!!, Addr = 0x%x, Data = 0x%x\n",
 			a_pSendData[0], a_pSendData[1]);
-			// add for BBS log++
-			#ifdef FIHBBS
-			if(!g_IsSearchSensor){
-				if(!g_SensorFound){
-					PK_ERR("[CAMERA SENSOR]%s\n %s()%4d\n", __FILE__, __func__  , __LINE__);
-					fih_bbs_camera_msg_by_addr(i2cId, FIH_BBS_CAMERA_ERRORCODE_I2C_WRITE);
-				}
-			}
-			#endif
-			// add for BBS log--
 		} else {
 			break;
 		}
@@ -1666,21 +1587,11 @@ static inline int adopt_CAMERA_HW_CheckIsAlive(void)
 					//
 					#ifdef CONFIG_FIH_PROJECT_NE1
 						printk("[MIMI]1 Sensor found ID = 0x%x\n", sensorID);
-						// add for BBS log++
-						#ifdef FIHBBS
-							g_SensorFound =1;
-						#endif
-						// add for BBS log--
 						snprintf(mtk_ccm_name + strlen(mtk_ccm_name),
 							sizeof(mtk_ccm_name) - strlen(mtk_ccm_name),
 							" CAM[%d]:%s;", g_invokeSocketIdx[i], g_invokeSensorNameStr[i]);
 					#else
 						printk("[MIMI]2 Sensor found ID = 0x%x\n", sensorID);
-						// add for BBS log++
-						#ifdef FIHBBS
-							g_SensorFound =1;
-						#endif
-						// add for BBS log--
 						/* add module id to proc sys begin*/
 						my_module_id = get_otp_module_id(0x04);
 						if(my_module_id == 0x01) {

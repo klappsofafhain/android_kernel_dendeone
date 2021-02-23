@@ -3228,7 +3228,7 @@ static long CAMERA_HW_Ioctl_Compat(struct file *filp, unsigned int cmd, unsigned
     /* int err; */
 
     data32_5 = compat_ptr(arg);
-	data_5 = compat_alloc_user_space(sizeof(*data_5));
+    data_5 = compat_alloc_user_space(sizeof(*data_5));
     if (data_5 == NULL)
 	return -EFAULT;
     PK_DBG("[CAMERA SENSOR] compat_get_acdk_sensor_resolution_info_struct\n");

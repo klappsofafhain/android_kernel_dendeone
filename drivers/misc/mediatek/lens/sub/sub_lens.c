@@ -48,13 +48,8 @@
 #endif
 
 #if I2C_CONFIG_SETTING == 1
-#ifdef CONFIG_MTK_LENS_GT9762AF_SUPPORT
-#define LENS_I2C_BUSNUM            3
-#define I2C_REGISTER_ID            0x18
-#else
 #define LENS_I2C_BUSNUM 1
 #define I2C_REGISTER_ID 0x27
-#endif
 #endif
 
 #define PLATFORM_DRIVER_NAME "lens_actuator_sub_af"
@@ -84,8 +79,7 @@ static int g_GetOisInfoCnt;
 static int g_OisPosIdx;
 static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
-//
-#ifdef CONFIG_FIH_PROJECT_NE1
+
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_BU6424AF, BU6424AF_SetI2Cclient, BU6424AF_Ioctl,
 	 BU6424AF_Release, BU6424AF_GetFileName, NULL},
@@ -93,24 +87,10 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	 BU6429AF_Release, BU6429AF_GetFileName, NULL},
 	{1, AFDRV_DW9714AF, DW9714AF_SetI2Cclient, DW9714AF_Ioctl,
 	 DW9714AF_Release, DW9714AF_GetFileName, NULL},
-#ifdef CONFIG_MTK_LENS_GT9762AF_SUPPORT
-	{1, AFDRV_GT9762AF, GT9762AF_SetI2Cclient, GT9762AF_Ioctl, GT9762AF_Release, GT9762AF_GetFileName, NULL},
-#endif
 	{1, AFDRV_DW9718AF, DW9718AF_SetI2Cclient, DW9718AF_Ioctl,
 	 DW9718AF_Release, DW9718AF_GetFileName, NULL},
 };
-#else //FRTP No AF:1st byte from 1 to 0
-static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
-	{0, AFDRV_BU6424AF, BU6424AF_SetI2Cclient, BU6424AF_Ioctl,
-	 BU6424AF_Release, BU6424AF_GetFileName, NULL},
-	{0, AFDRV_BU6429AF, BU6429AF_SetI2Cclient, BU6429AF_Ioctl,
-	 BU6429AF_Release, BU6429AF_GetFileName, NULL},
-	{0, AFDRV_DW9714AF, DW9714AF_SetI2Cclient, DW9714AF_Ioctl,
-	 DW9714AF_Release, DW9714AF_GetFileName, NULL},
-	{0, AFDRV_DW9718AF, DW9718AF_SetI2Cclient, DW9718AF_Ioctl,
-	 DW9718AF_Release, DW9718AF_GetFileName, NULL},
-};
-#endif
+
 static struct stAF_DrvList *g_pstAF_CurDrv;
 
 static spinlock_t g_AF_SpinLock;

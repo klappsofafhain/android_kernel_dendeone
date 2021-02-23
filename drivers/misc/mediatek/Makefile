@@ -102,6 +102,7 @@ obj-$(CONFIG_MTK_IN_HOUSE_TEE_SUPPORT) += gcpu/
 obj-$(CONFIG_TRUSTY) += gcpu/
 obj-$(CONFIG_TRUSTONIC_TEE_SUPPORT) += gud/
 obj-$(CONFIG_MMPROFILE) += mmp/
+obj-$(CONFIG_MTK_CMDQ) += mdp/
 obj-$(CONFIG_MTK_M4U)	+= m4u/
 obj-$(CONFIG_MTK_PSEUDO_M4U)   += pseudo_m4u/
 obj-$(CONFIG_MTK_SMI_EXT)	+= smi/

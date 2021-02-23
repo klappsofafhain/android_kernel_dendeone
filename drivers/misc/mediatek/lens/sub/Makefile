@@ -50,5 +50,5 @@ obj-y  += common/dw9718af/
 obj-y  += common/lc898214af/
 obj-y  += common/wv511aaf/
 obj-y  += common/ak7371af/
-obj-$(CONFIG_MTK_LENS_GT9762AF_SUPPORT)  += common/gt9762af/GT9762AF.o
+
 endif

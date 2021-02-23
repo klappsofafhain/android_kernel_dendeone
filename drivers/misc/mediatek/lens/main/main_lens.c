@@ -56,11 +56,7 @@
 
 #if I2C_CONFIG_SETTING == 1
 #define LENS_I2C_BUSNUM 0
-#ifdef CONFIG_MTK_LENS_GT9762AF_SUPPORT
-#define I2C_REGISTER_ID            0x18
-#else
 #define I2C_REGISTER_ID 0x28
-#endif
 #endif
 
 #define PLATFORM_DRIVER_NAME "lens_actuator_main_af"
@@ -90,8 +86,7 @@ static int g_GetOisInfoCnt;
 static int g_OisPosIdx;
 static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
-//
-#ifdef CONFIG_FIH_PROJECT_NE1
+
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl,
 	 AK7371AF_Release, AK7371AF_GetFileName, NULL},
@@ -114,9 +109,6 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	 DW9714AF_Release, DW9714AF_GetFileName, NULL},
 	{1, AFDRV_DW9718SAF, DW9718SAF_SetI2Cclient, DW9718SAF_Ioctl,
 	 DW9718SAF_Release, DW9718SAF_GetFileName, NULL},
-#ifdef CONFIG_MTK_LENS_GT9762AF_SUPPORT
-	{1, AFDRV_GT9762AF, GT9762AF_SetI2Cclient, GT9762AF_Ioctl, GT9762AF_Release, GT9762AF_GetFileName, NULL},
-#endif
 	{1, AFDRV_DW9719TAF, DW9719TAF_SetI2Cclient, DW9719TAF_Ioctl,
 	 DW9719TAF_Release, DW9719TAF_GetFileName, NULL},
 	{1, AFDRV_LC898212XDAF, LC898212XDAF_SetI2Cclient, LC898212XDAF_Ioctl,
@@ -144,57 +136,7 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_WV511AAF, WV511AAF_SetI2Cclient, WV511AAF_Ioctl,
 	 WV511AAF_Release, WV511AAF_GetFileName, NULL},
 };
-#else //FRTP No AF :1st byte from 1 to 0
-static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
-	{0, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl,
-	 AK7371AF_Release, AK7371AF_GetFileName, NULL},
-	{0, AFDRV_BU6424AF, BU6424AF_SetI2Cclient, BU6424AF_Ioctl,
-	 BU6424AF_Release, BU6424AF_GetFileName, NULL},
-	{0, AFDRV_BU6429AF, BU6429AF_SetI2Cclient, BU6429AF_Ioctl,
-	 BU6429AF_Release, BU6429AF_GetFileName, NULL},
-	{0, AFDRV_BU64748AF, bu64748af_SetI2Cclient_Main, bu64748af_Ioctl_Main,
-	 bu64748af_Release_Main, bu64748af_GetFileName_Main, NULL},
-	{0,
-#ifdef CONFIG_MTK_LENS_BU63165AF_SUPPORT
-	 AFDRV_BU63165AF, BU63165AF_SetI2Cclient, BU63165AF_Ioctl,
-	 BU63165AF_Release, BU63165AF_GetFileName, NULL
-#else
-	 AFDRV_BU63169AF, BU63169AF_SetI2Cclient, BU63169AF_Ioctl,
-	 BU63169AF_Release, BU63169AF_GetFileName, NULL
-#endif
-	},
-	{0, AFDRV_DW9714AF, DW9714AF_SetI2Cclient, DW9714AF_Ioctl,
-	 DW9714AF_Release, DW9714AF_GetFileName, NULL},
-	{0, AFDRV_DW9718SAF, DW9718SAF_SetI2Cclient, DW9718SAF_Ioctl,
-	 DW9718SAF_Release, DW9718SAF_GetFileName, NULL},
-	{0, AFDRV_DW9719TAF, DW9719TAF_SetI2Cclient, DW9719TAF_Ioctl,
-	 DW9719TAF_Release, DW9719TAF_GetFileName, NULL},
-	{0, AFDRV_LC898212XDAF, LC898212XDAF_SetI2Cclient, LC898212XDAF_Ioctl,
-	 LC898212XDAF_Release, LC898212XDAF_GetFileName, NULL},
-	{0, AFDRV_DW9814AF, DW9814AF_SetI2Cclient, DW9814AF_Ioctl,
-	 DW9814AF_Release, DW9814AF_GetFileName, NULL},
-	{0, AFDRV_FP5510E2AF, FP5510E2AF_SetI2Cclient, FP5510E2AF_Ioctl,
-	 FP5510E2AF_Release, FP5510E2AF_GetFileName, NULL},
-	{0, AFDRV_DW9718AF, DW9718AF_SetI2Cclient, DW9718AF_Ioctl,
-	 DW9718AF_Release, DW9718AF_GetFileName, NULL},
-	{0, AFDRV_LC898212AF, LC898212AF_SetI2Cclient, LC898212AF_Ioctl,
-	 LC898212AF_Release, LC898212AF_GetFileName, NULL},
-	{0, AFDRV_LC898214AF, LC898214AF_SetI2Cclient, LC898214AF_Ioctl,
-	 LC898214AF_Release, LC898214AF_GetFileName, NULL},
-	{0, AFDRV_LC898217AF, LC898217AF_SetI2Cclient, LC898217AF_Ioctl,
-	 LC898217AF_Release, LC898217AF_GetFileName, NULL},
-	{0, AFDRV_LC898217AFA, LC898217AFA_SetI2Cclient, LC898217AFA_Ioctl,
-	 LC898217AFA_Release, LC898217AFA_GetFileName, NULL},
-	{0, AFDRV_LC898217AFB, LC898217AFB_SetI2Cclient, LC898217AFB_Ioctl,
-	 LC898217AFB_Release, LC898217AFB_GetFileName, NULL},
-	{0, AFDRV_LC898217AFC, LC898217AFC_SetI2Cclient, LC898217AFC_Ioctl,
-	 LC898217AFC_Release, LC898217AFC_GetFileName, NULL},
-	{0, AFDRV_LC898122AF, LC898122AF_SetI2Cclient, LC898122AF_Ioctl,
-	 LC898122AF_Release, LC898122AF_GetFileName, NULL},
-	{0, AFDRV_WV511AAF, WV511AAF_SetI2Cclient, WV511AAF_Ioctl,
-	 WV511AAF_Release, WV511AAF_GetFileName, NULL},
-};
-#endif
+
 static struct stAF_DrvList *g_pstAF_CurDrv;
 
 static spinlock_t g_AF_SpinLock;

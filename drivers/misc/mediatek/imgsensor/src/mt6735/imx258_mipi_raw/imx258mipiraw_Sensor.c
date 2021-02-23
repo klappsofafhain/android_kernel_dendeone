@@ -1193,7 +1193,7 @@ static void sensor_init(void)
 
 static void preview_setting(void)
 {
-    /* @20151221 reffered to LG Mode B3 */
+    /* @20151221 reffered to customer Mode B3 */
     LOG_INF("preview E\n");
     write_cmos_sensor(0x0100, 0x00);
     mdelay(10);
@@ -1532,7 +1532,7 @@ static void capture_setting(kal_uint16 curretfps, kal_uint8 pdaf_mode)
     }
     else
     {
-        /* @20151215 Referred to LG A1 Mode */
+        /* @20151215 Referred to customer A1 Mode */
         write_cmos_sensor(0x0100, 0x00);
         mdelay(10);
 

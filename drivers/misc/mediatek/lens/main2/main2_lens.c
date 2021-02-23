@@ -81,8 +81,7 @@ static int g_GetOisInfoCnt;
 static int g_OisPosIdx;
 static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
-//
-#ifdef CONFIG_FIH_PROJECT_NE1
+
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	{1, AFDRV_LC898212XDAF_F, LC898212XDAF_F_SetI2Cclient,
 	 LC898212XDAF_F_Ioctl, LC898212XDAF_F_Release,
@@ -101,26 +100,6 @@ static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
 	 bu64748af_Ioctl_Main2, bu64748af_Release_Main2,
 	 bu64748af_GetFileName_Main2, NULL},
 };
-#else //FRTP
-static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
-	{0, AFDRV_LC898212XDAF_F, LC898212XDAF_F_SetI2Cclient,
-	 LC898212XDAF_F_Ioctl, LC898212XDAF_F_Release,
-	 LC898212XDAF_F_GetFileName, NULL},
-	{0, AFDRV_LC898217AF, LC898217AF_SetI2Cclient, LC898217AF_Ioctl,
-	 LC898217AF_Release, LC898217AF_GetFileName, NULL},
-	{0, AFDRV_LC898217AFA, LC898217AFA_SetI2Cclient, LC898217AFA_Ioctl,
-	 LC898217AFA_Release, LC898217AFA_GetFileName, NULL},
-	{0, AFDRV_LC898217AFB, LC898217AFB_SetI2Cclient, LC898217AFB_Ioctl,
-	 LC898217AFB_Release, LC898217AFB_GetFileName, NULL},
-	{0, AFDRV_LC898217AFC, LC898217AFC_SetI2Cclient, LC898217AFC_Ioctl,
-	 LC898217AFC_Release, LC898217AFC_GetFileName, NULL},
-	{0, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl,
-	 AK7371AF_Release, AK7371AF_GetFileName, NULL},
-	{0, AFDRV_BU64748AF, bu64748af_SetI2Cclient_Main2,
-	 bu64748af_Ioctl_Main2, bu64748af_Release_Main2,
-	 bu64748af_GetFileName_Main2, NULL},
-};
-#endif
 
 static struct stAF_DrvList *g_pstAF_CurDrv;
 

@@ -27,8 +27,7 @@ endef
 
 MTK_PLATFORM := $(subst ",,$(CONFIG_MTK_PLATFORM))
 ARCH_MTK_PROJECT := $(subst ",,$(CONFIG_ARCH_MTK_PROJECT))
-# add for BBS log
-obj-y               += fihBBS/
+
 
 ifneq ($(CONFIG_MTK_IMGSENSOR),m)
 obj-y				+= kd_sensorlist.o
