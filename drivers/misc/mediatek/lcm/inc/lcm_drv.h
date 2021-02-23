@@ -17,6 +17,9 @@
 #include <linux/device.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+/*include for pio*/
+#include <mt-plat/mt_gpio.h>
+#include <mach/gpio_const.h>
 
 #ifndef ARY_SIZE
 #define ARY_SIZE(x) (sizeof((x)) / sizeof((x[0])))

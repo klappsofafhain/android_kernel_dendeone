@@ -891,6 +891,106 @@ void load_lcm_resources_from_DT(struct LCM_DRIVER *lcm_drv)
 }
 #endif
 
+#include <linux/string.h> 
+#include <linux/wait.h> 
+#include <linux/platform_device.h> 
+#include <linux/gpio.h> 
+#include <linux/pinctrl/consumer.h> 
+#include <linux/of_gpio.h> 
+#include <linux/gpio.h> 
+#include <asm-generic/gpio.h> 
+static unsigned int GPIO_READ_ID_PIN;
+
+
+int lcm_get_readID_pin(void)
+{
+	static struct device_node *node;
+
+	int ret;
+	int temp_id=0;
+
+	node = of_find_compatible_node(NULL, NULL, "mediatek,lcm_mode");
+
+	GPIO_READ_ID_PIN = of_get_named_gpio(node, "lcm_read_id_gpio", 0);
+
+	ret = gpio_request(GPIO_READ_ID_PIN, "lcm_read_id_gpio");
+	if (ret < 0)
+	{
+		pr_err("[LCM][ERROR] 1Unable to request GPIO_READ_ID_PIN\n");
+		//error,free,request
+		gpio_free(GPIO_READ_ID_PIN);
+		ret = gpio_request(GPIO_READ_ID_PIN, "lcm_read_id_gpio");
+		if (ret < 0){
+			pr_err("[LCM][ERROR] 2Unable to request GPIO_READ_ID_PIN Twice\n");//add log,two error
+		}
+		else{
+			pr_err("[LCM][OK] 3Request GPIO_READ_ID_PIN Twice OK\n");//add log , two ok
+			gpio_direction_input(GPIO_READ_ID_PIN);
+			temp_id=gpio_get_value(GPIO_READ_ID_PIN);
+		}
+
+	}
+	else
+	{
+		pr_err("4[LCM][OK] Request GPIO_READ_ID_PIN ONCE OK\n");
+		gpio_direction_input(GPIO_READ_ID_PIN);
+		temp_id=gpio_get_value(GPIO_READ_ID_PIN);
+	}
+return temp_id;
+}
+
+
+
+#define SLT_DEVINFO_LCM
+#ifdef SLT_DEVINFO_LCM
+#include <linux/dev_info.h>
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
+static struct devinfo_struct *devinfo_lcm = NULL;
+static char v_info[10];
+static void lcm_devinfo_init(void)
+{
+	sprintf(v_info,"9608a");
+	devinfo_lcm =(struct devinfo_struct*) kmalloc(sizeof(struct devinfo_struct), GFP_KERNEL);
+	if(NULL != devinfo_lcm)
+	{
+		devinfo_lcm->device_type = "LCM";
+		devinfo_lcm->device_ic = "otm9608a";
+		devinfo_lcm->device_used = DEVINFO_USED;
+		devinfo_lcm->device_module = "ORISE TECH";
+
+                if(gpio_get_value(GPIO_READ_ID_PIN)==1)
+                    devinfo_lcm->device_vendor = "yushun";
+                else
+		    devinfo_lcm->device_vendor = "truly";
+		devinfo_lcm->device_version = v_info;
+		devinfo_lcm->device_info = "540*960";
+		devinfo_check_add_device(devinfo_lcm);
+	}
+
+}
+
+static int lcm_proc_open_show (struct seq_file* m, void* data)
+{
+    char temp[35] = {0};
+    int cnt = 0;
+    if(gpio_get_value(GPIO_READ_ID_PIN)==1)
+          cnt = sprintf(temp, "LCM[yushun]otm9608_qhd_dsi_cmd\n");
+    else
+          cnt = sprintf(temp, "LCM[xinli]otm9608_qhd_dsi_cmd\n");
+    seq_printf(m, "%s\n", temp);
+    return 0;
+
+}
+static int lcm_proc_open (struct inode* inode, struct file* file) 
+{
+    return single_open(file, lcm_proc_open_show, inode->i_private);
+}
+static const struct file_operations lcm_info_fops = {
+    .open = lcm_proc_open,
+    .read = seq_read,
+};
+#endif
 disp_lcm_handle *disp_lcm_probe(char *plcm_name, enum LCM_INTERFACE_ID lcm_id, int is_lcm_inited)
 {
 	int lcmindex = 0;
@@ -979,6 +1079,18 @@ disp_lcm_handle *disp_lcm_probe(char *plcm_name, enum LCM_INTERFACE_ID lcm_id, i
 		DISPERR("FATAL ERROR!!!No LCM Driver defined\n");
 		return NULL;
 	}
+	
+	
+	#ifdef SLT_DEVINFO_LCM
+        lcm_get_readID_pin();
+	lcm_devinfo_init();
+        
+	if(proc_create("lcm_info", 0444, NULL, &lcm_info_fops) == NULL)
+	{
+		printk("create_proc_entry  failed\n");
+		return NULL;
+    }
+#endif
 
 	plcm = kzalloc(sizeof(uint8_t *) * sizeof(disp_lcm_handle), GFP_KERNEL);
 	lcm_param = kzalloc(sizeof(uint8_t *) * sizeof(struct LCM_PARAMS), GFP_KERNEL);
@@ -1352,3 +1464,4 @@ int disp_lcm_set_cmd(disp_lcm_handle *plcm, void *handle, int *lcm_cmd, unsigned
 	DISPERR("lcm_drv is null\n");
 	return -1;
 }
+

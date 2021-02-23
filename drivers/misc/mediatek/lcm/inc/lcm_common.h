@@ -26,7 +26,7 @@ enum LCM_STATUS {
 void lcm_common_parse_dts(const struct LCM_DTS *DTS,
 	unsigned char force_update);
 void lcm_common_set_util_funcs(const struct LCM_UTIL_FUNCS *util);
-void lcm_common_get_params(struct LCM_PARAMS *params);
+void lcm_common_get_params(LCM_PARAMS *params);
 void lcm_common_init(void);
 void lcm_common_suspend(void);
 void lcm_common_resume(void);

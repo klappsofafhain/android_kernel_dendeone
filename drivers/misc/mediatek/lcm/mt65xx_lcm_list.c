@@ -28,31 +28,6 @@ enum LCM_DSI_MODE_CON lcm_dsi_mode;
 #define LCD_HW_ID_STATUS_ERROR  0x03
 
 struct LCM_DRIVER *lcm_driver_list[] = {
-#if defined(ST7701_DSI_VDO_FWVGA_GL)
-	&st7701_dsi_vdo_fwvga_gl_lcm_drv,
-#endif
-
-#if defined(ST7701_DSI_VDO_FWVGA_HL_MP)
-	&st7701_dsi_vdo_fwvga_hl_mp_lcm_drv,
-#endif
-
-#if defined(ST7701_DSI_VDO_FWVGA_HS4D5)
-	&st7701_dsi_vdo_fwvga_hs4d5_lcm_drv,
-#endif
-#if defined(ST7701_DSI_VDO_FWVGA_COE)
-	&st7701_dsi_vdo_fwvga_coe_lcm_drv,
-#endif
-
-#if defined(ST7701_DSI_VDO_FWVGA_IVO4D5)
-	&st7701_dsi_vdo_fwvga_ivo4d5_lcm_drv,
-#endif
-#if defined(NT35521_HD720_DSI_VDO_INNOLUX)
-	&nt35521_hd720_dsi_vdo_innolux_lcm_drv,
-#endif
-
-#if defined(NT35512_FWVGA_DSI_VDO_ZGD)
-	&nt35512_fwvga_dsi_vdo_zgd_lcm_drv,
-#endif
 #if defined(ILI9881C_HD_DSI_VDO_ILITEK_NT50358_3LANE)
 	&ili9881c_hd_dsi_vdo_ilitek_nt50358_3lane_lcm_drv,
 #endif

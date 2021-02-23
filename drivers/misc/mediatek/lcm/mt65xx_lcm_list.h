@@ -15,14 +15,6 @@
 #define __MT65XX_LCM_LIST_H__
 
 #include <lcm_drv.h>
-
-extern struct LCM_DRIVER nt35512_fwvga_dsi_vdo_zgd_lcm_drv;
-extern struct LCM_DRIVER nt35521_hd720_dsi_vdo_innolux_lcm_drv;
-extern struct LCM_DRIVER st7701_dsi_vdo_fwvga_gl_lcm_drv;
-extern struct LCM_DRIVER st7701_dsi_vdo_fwvga_hl_mp_lcm_drv;
-extern struct LCM_DRIVER st7701_dsi_vdo_fwvga_coe_lcm_drv;
-extern struct LCM_DRIVER st7701_dsi_vdo_fwvga_hs4d5_lcm_drv;
-extern struct LCM_DRIVER st7701_dsi_vdo_fwvga_ivo4d5_lcm_drv;
 extern struct LCM_DRIVER otm1282a_hd720_dsi_vdo_60hz_lcm_drv;
 extern struct LCM_DRIVER otm1282a_hd720_dsi_vdo_lcm_drv;
 extern struct LCM_DRIVER nt35595_fhd_dsi_cmd_truly_8163_lcm_drv;
