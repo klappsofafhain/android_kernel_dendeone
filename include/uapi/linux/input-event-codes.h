@@ -329,6 +329,8 @@
 					  rely on ambient */
 #define KEY_BRIGHTNESS_ZERO	KEY_BRIGHTNESS_AUTO
 #define KEY_DISPLAY_OFF		245	/* display device to off state */
+#define KEY_HALL_DOWN		59//131//403//381//256//249//266	/* //lc --cbc add 20170330 for midtest */  //59 --->F1
+#define KEY_HALL_UP		    60//132//402//382//257//250//267	/* //lc --cbc add 20150330 for midtest */  //60---->F2
 
 #define KEY_WWAN		246	/* Wireless WAN (LTE, UMTS, GSM, etc.) */
 #define KEY_WIMAX		KEY_WWAN
