@@ -1,4 +1,4 @@
-subdir-ccflags-y +=
+subdir-ccflags-y += -Werror
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
 ccflags-y += -I$(srctree)/drivers/input/touchscreen/mediatek
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/$(MTK_PLATFORM)/include
@@ -19,5 +19,3 @@ obj-$(CONFIG_TOUCHSCREEN_MTK_NT36xxx)	+=  NT36xxx/
 obj-$(CONFIG_TOUCHSCREEN_MTK_GT9XXTB_HN_NEW)	+=  gt9xxtb_hn_new/
 obj-$(CONFIG_TOUCHSCREEN_MTK_NT11206) += NT11206/
 obj-$(CONFIG_TOUCHSCREEN_MTK_GT5663)  += GT5663/
-obj-$(CONFIG_TOUCHSCREEN_MTK_AH1887)	+=  AH1887/
-obj-$(CONFIG_TOUCHSCREEN_MTK_ATMEL_MXT336) += ATMEL_MXT336/
