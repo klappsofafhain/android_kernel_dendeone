@@ -309,6 +309,7 @@ void fgauge_get_profile_id(void)
 /* ============================================================ // */
 struct battery_meter_custom_data batt_meter_cust_data;
 
+#if 0
 int __batt_meter_init_cust_data_from_cust_header(void)
 {
 	battery_log(BAT_LOG_CRTI, "__batt_meter_init_cust_data_from_cust_header\n");
@@ -498,6 +499,7 @@ int __batt_meter_init_cust_data_from_cust_header(void)
 
 	return 0;
 }
+#endif
 
 #if defined(BATTERY_DTS_SUPPORT) && defined(CONFIG_OF)
 static void __batt_meter_parse_node(const struct device_node *np,
@@ -794,7 +796,7 @@ int batt_meter_init_cust_data(void)
 		return 0;
 	init_done = 1;
 
-	__batt_meter_init_cust_data_from_cust_header();
+	//__batt_meter_init_cust_data_from_cust_header();
 
 #if defined(BATTERY_DTS_SUPPORT) && defined(CONFIG_OF)
 	bm_print(BM_LOG_CRTI, "battery meter custom init by DTS\n");

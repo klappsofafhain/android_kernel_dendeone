@@ -51,16 +51,16 @@
 
 #define FG_METER_RESISTANCE 0
 
-/* Qmax for battery  */
-#define Q_MAX_POS_50 1463
-#define Q_MAX_POS_25 1437
-#define Q_MAX_POS_0 1220
-#define Q_MAX_NEG_10 1137
-
-#define Q_MAX_POS_50_H_CURRENT 1511
-#define Q_MAX_POS_25_H_CURRENT 1462
-#define Q_MAX_POS_0_H_CURRENT 818
-#define Q_MAX_NEG_10_H_CURRENT 149
+	/* Qmax for battery  */
+#define Q_MAX_POS_50	1463//2436
+#define Q_MAX_POS_25	1437//2463
+#define Q_MAX_POS_0	1220//2409
+#define Q_MAX_NEG_10	1137//2412
+	
+#define Q_MAX_POS_50_H_CURRENT	1511//2414
+#define Q_MAX_POS_25_H_CURRENT	1462//2441
+#define Q_MAX_POS_0_H_CURRENT	818//1997
+#define Q_MAX_NEG_10_H_CURRENT	149//1139 
 
 
 /* Discharge Percentage */
@@ -82,11 +82,7 @@
 #define OCV_BOARD_COMPESATE	0 /*mV */
 #define R_FG_BOARD_BASE 1000
 #define R_FG_BOARD_SLOPE 1000 /*slope*/
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-#define CAR_TUNE_VALUE 100 /*1.00*/
-#else
 #define CAR_TUNE_VALUE 86 /*1.00*/
-#endif
 
 
 /* HW Fuel gague  */
@@ -109,10 +105,8 @@
 
 /* #define Q_MAX_BY_SYS */
 #define Q_MAX_SYS_VOLTAGE		3300
-#if !defined(CONFIG_FIH_PSE_TEST)
 #define SHUTDOWN_GAUGE0
 #define SHUTDOWN_GAUGE1_XMINS
-#endif
 #define SHUTDOWN_GAUGE1_MINS		60
 
 #define SHUTDOWN_SYSTEM_VOLTAGE		3400
@@ -126,7 +120,7 @@
 #define DIFFERENCE_HWOCV_VBAT		30
 
 /* fg 1.0 */
-#define CUST_POWERON_DELTA_CAPACITY_TOLRANCE	40
+#define CUST_POWERON_DELTA_CAPACITY_TOLRANCE	30
 #define CUST_POWERON_LOW_CAPACITY_TOLRANCE		5
 #define CUST_POWERON_MAX_VBAT_TOLRANCE			90
 #define CUST_POWERON_DELTA_VBAT_TOLRANCE		30
@@ -191,45 +185,18 @@
 #define TEMPERATURE_T3 50
 #define TEMPERATURE_T 255 /* This should be fixed, never change the value*/
 
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define FG_METER_RESISTANCE 90
-#else
 #define FG_METER_RESISTANCE 0
-#endif
 
 /* Qmax for battery  */
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define Q_MAX_POS_50 2202
-#define Q_MAX_POS_25 2180
-#define Q_MAX_POS_0 2098
-#define Q_MAX_NEG_10 1943
+#define Q_MAX_POS_50 2314
+#define Q_MAX_POS_25 2340
+#define Q_MAX_POS_0 2289
+#define Q_MAX_NEG_10 2292
 
-#define Q_MAX_POS_50_H_CURRENT 2095
-#define Q_MAX_POS_25_H_CURRENT 2161
-#define Q_MAX_POS_0_H_CURRENT 1917
-#define Q_MAX_NEG_10_H_CURRENT 1137
-#elif defined(CONFIG_FIH_PROJECT_NE1)
-//these should change,when ZCV of NE1's battery come.
-#define Q_MAX_POS_50 2568
-#define Q_MAX_POS_25 2554
-#define Q_MAX_POS_0 1780
-#define Q_MAX_NEG_10 632
-
-#define Q_MAX_POS_50_H_CURRENT 2517
-#define Q_MAX_POS_25_H_CURRENT 2503
-#define Q_MAX_POS_0_H_CURRENT 1690
-#define Q_MAX_NEG_10_H_CURRENT 619
-#else
-#define Q_MAX_POS_50 1463
-#define Q_MAX_POS_25 1437
-#define Q_MAX_POS_0 1220
-#define Q_MAX_NEG_10 1137
-
-#define Q_MAX_POS_50_H_CURRENT 1511
-#define Q_MAX_POS_25_H_CURRENT 1462
-#define Q_MAX_POS_0_H_CURRENT 818
-#define Q_MAX_NEG_10_H_CURRENT 149
-#endif
+#define Q_MAX_POS_50_H_CURRENT 2294
+#define Q_MAX_POS_25_H_CURRENT 2318
+#define Q_MAX_POS_0_H_CURRENT 1898
+#define Q_MAX_NEG_10_H_CURRENT 1082
 
 
 /* Discharge Percentage */
@@ -243,12 +210,7 @@
 #else
 #define CUST_TRACKING_POINT  1
 #endif
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-//modify for E1 project Rsense = 56mR.
-#define CUST_R_SENSE 56
-#else
 #define CUST_R_SENSE 68
-#endif
 #define CUST_HW_CC 0
 #define AGING_TUNING_VALUE 103
 #define CUST_R_FG_OFFSET 0
@@ -256,11 +218,7 @@
 #define OCV_BOARD_COMPESATE	0 /*mV */
 #define R_FG_BOARD_BASE 1000
 #define R_FG_BOARD_SLOPE 1000 /*slope*/
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define CAR_TUNE_VALUE 100 /*1.00*/
-#else
-#define CAR_TUNE_VALUE 101 /*1.00*/
-#endif
+#define CAR_TUNE_VALUE 89 /*1.00*/
 
 
 /* HW Fuel gague  */
@@ -270,45 +228,19 @@
 #define R_FG_VALUE 10 /* mOhm, base is 20*/
 
 /* fg 2.0 */
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define DIFFERENCE_HWOCV_RTC		65	/*30 ->65*/
-#else
 #define DIFFERENCE_HWOCV_RTC		30
-#endif
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define DIFFERENCE_HWOCV_SWOCV		15
-#else
 #define DIFFERENCE_HWOCV_SWOCV		10
-#endif
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define DIFFERENCE_HWOCV_SWOCV_CHR	5
-#endif
 #define DIFFERENCE_SWOCV_RTC		10
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define MAX_SWOCV			1	/*5 -> 1*/
-#else
 #define MAX_SWOCV			3
-#endif
 
 #define DIFFERENCE_VOLTAGE_UPDATE	20
 #define AGING1_LOAD_SOC			70
 #define AGING1_UPDATE_SOC		30
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define BATTERYPSEUDO100		100	//95->100.
-#define BATTERYPSEUDO1			2
-#else
 #define BATTERYPSEUDO100		95
 #define BATTERYPSEUDO1			4
-#endif
 
 /* #define Q_MAX_BY_SYS */
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define Q_MAX_SYS_VOLTAGE		3350
-#else
 #define Q_MAX_SYS_VOLTAGE		3300
-#endif
-
-
 #define SHUTDOWN_GAUGE0
 #define SHUTDOWN_GAUGE1_XMINS
 #define SHUTDOWN_GAUGE1_MINS		60
@@ -316,17 +248,8 @@
 #define SHUTDOWN_SYSTEM_VOLTAGE		3400
 #define CHARGE_TRACKING_TIME		60
 #define DISCHARGE_TRACKING_TIME		10
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//[ALPS03167162] GM2.0 patch.
-#define SHUTDOWN_GAUGE0_VOLTAGE		3400
-#endif
 
 #define RECHARGE_TOLERANCE		10
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//[ALPS03167162] GM2.0 patch.
-#define BAT_FULL_CHK_THR		60
-#endif
-
 /* SW Fuel Gauge */
 #define MAX_HWOCV			5
 #define MAX_VBAT			90
@@ -337,15 +260,7 @@
 #define CUST_POWERON_LOW_CAPACITY_TOLRANCE		5
 #define CUST_POWERON_MAX_VBAT_TOLRANCE			90
 #define CUST_POWERON_DELTA_VBAT_TOLRANCE		30
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define CUST_POWERON_DELTA_VBAT_INDEX           15	//Add for RTC Vbat
-#endif
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//modify by D0 (10 -> 25).
-#define CUST_POWERON_DELTA_HW_SW_OCV_CAPACITY_TOLRANCE	25
-#else
 #define CUST_POWERON_DELTA_HW_SW_OCV_CAPACITY_TOLRANCE	10
-#endif
 
 
 /* Disable Battery check for HQA */
@@ -373,33 +288,6 @@
 #define IS_BATTERY_REMOVE_BY_PMIC
 
 
-#if defined(CONFIG_FIH_PROJECT_FRT)
-//add for NTC
-#define NTC_TABLE_SIZE      (131)
-#define NTC_MAX_TEMP        (91)
-#define NTC_MIN_TEMP        (-40)
-#define NO_NTC_TEMP         (-128)
-
-//BAT_ID
-#define BATTERY_ID_CHECK
-//#define MTK_GET_BATTERY_ID_BY_AUXADC
-//#define TOTAL_BATTERY_NUMBER	2
-//Beck: add MULTI bat
-#define MTK_MULTI_BAT_PROFILE_SUPPORT
-#elif defined(CONFIG_FIH_PROJECT_NE1)
-//add for NTC
-#define NTC_TABLE_SIZE      (20)    // 20
-#define NTC_MAX_TEMP        (70)    // 70
-#define NTC_MIN_TEMP        (-30)   //-30
-#define NO_NTC_TEMP         (-128)
-
-//add for E1 maby need second battery.
-#define MTK_MULTI_BAT_PROFILE_SUPPORT
-//BAT_ID
-#define BATTERY_ID_CHECK
-#define MTK_GET_BATTERY_ID_BY_AUXADC
-//#define TOTAL_BATTERY_NUMBER	1
-#endif
 
 #elif defined(CONFIG_MACH_MT6753)
 /* ============================================================

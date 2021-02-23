@@ -3233,7 +3233,8 @@ void chrdet_int_handler(void)
 
 		if (boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT
 		    || boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
-			PMICLOG("[chrdet_int_handler] Unplug Charger/USB\n");
+		   
+			PMICLOG("[chktdrdet_int_handler] Unplug Charger/USB\n");
 			mt_power_off();
 		}
 	}

@@ -19,70 +19,31 @@
 #define TALKING_RECHARGE_VOLTAGE 3800
 #define TALKING_SYNC_TIME		   60
 
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//add
-#define MAX_WORKING_TEMPERATURE      65
-#endif
-
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-//add for retry charger type
-#define FIH_CHECK_CHR_TYPE
-#ifdef FIH_CHECK_CHR_TYPE
-#define CHECK_CHR_TYPE_SUM      3
-#define CHECK_CHR_TYPE_TIME     30//s
-#endif
-#endif
-
 /* Battery Temperature Protection */
-//reference battery SPEC...(waiting)
+#define BAT_HIGH_TEMPERATURE 55 
 #define MTK_TEMPERATURE_RECHARGE_SUPPORT
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define MAX_CHARGE_TEMPERATURE  56
-#define MAX_CHARGE_TEMPERATURE_MINUS_X_DEGREE	55
-#define MIN_CHARGE_TEMPERATURE  0
-#define MIN_CHARGE_TEMPERATURE_PLUS_X_DEGREE	1
-#else
-#define MAX_CHARGE_TEMPERATURE  50
-#define MAX_CHARGE_TEMPERATURE_MINUS_X_DEGREE	47
-#define MIN_CHARGE_TEMPERATURE  0
-#define MIN_CHARGE_TEMPERATURE_PLUS_X_DEGREE	6
-#endif
+#define MAX_CHARGE_TEMPERATURE  45
+#define MAX_CHARGE_TEMPERATURE_MINUS_X_DEGREE	40
+#define MIN_CHARGE_TEMPERATURE  5
+#define MIN_CHARGE_TEMPERATURE_PLUS_X_DEGREE	10
 #define ERR_CHARGE_TEMPERATURE  0xFF
 
 /* Linear Charging Threshold */
-#define V_PRE2CC_THRES 3400
-#define V_CC2TOPOFF_THRES		4050
-#define RECHARGING_VOLTAGE      4110
+#define V_PRE2CC_THRES          3450
+#define V_CC2TOPOFF_THRES		4400
+#define RECHARGING_VOLTAGE      4300
 #define CHARGING_FULL_CURRENT    100
 
 /* Charging Current Setting */
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-#define CONFIG_USB_IF
-#endif
 #define USB_CHARGER_CURRENT_SUSPEND			0
 #define USB_CHARGER_CURRENT_UNCONFIGURED	CHARGE_CURRENT_70_00_MA
 #define USB_CHARGER_CURRENT_CONFIGURED		CHARGE_CURRENT_500_00_MA
 
 #define USB_CHARGER_CURRENT					CHARGE_CURRENT_500_00_MA
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//mofidy (800mA -> ?mA)
-#ifdef BATTERY_ZL3
-#define AC_CHARGER_CURRENT					CHARGE_CURRENT_800_00_MA
-#else
-#define AC_CHARGER_CURRENT					CHARGE_CURRENT_1250_00_MA
-#endif
-#else
-#define AC_CHARGER_CURRENT					CHARGE_CURRENT_800_00_MA
-#endif
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//
-#define AC_CHARGER_CURRENT_2A_ADAPTOR		CHARGE_CURRENT_1600_00_MA
-#endif
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#define NON_STD_AC_CHARGER_CURRENT			CHARGE_CURRENT_1000_00_MA
-#else
+//#define AC_CHARGER_CURRENT					CHARGE_CURRENT_800_00_MA
+#define AC_CHARGER_CURRENT					CHARGE_CURRENT_1200_00_MA  
+#define AC_CHARGER_INPUT_CURRENT            CHARGE_CURRENT_1500_00_MA  
 #define NON_STD_AC_CHARGER_CURRENT			CHARGE_CURRENT_500_00_MA
-#endif
 #define CHARGING_HOST_CHARGER_CURRENT       CHARGE_CURRENT_650_00_MA
 #define APPLE_0_5A_CHARGER_CURRENT          CHARGE_CURRENT_500_00_MA
 #define APPLE_1_0A_CHARGER_CURRENT          CHARGE_CURRENT_650_00_MA
@@ -91,20 +52,7 @@
 
 /* Precise Tunning */
 #define BATTERY_AVERAGE_DATA_NUMBER	3
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//mofidy (30 -> 6)
-#define BATTERY_AVERAGE_SIZE 6 //30
-#else
 #define BATTERY_AVERAGE_SIZE 30
-#endif
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//add for battery temp pin not connect.
-#define BATTERY_CHECK_NEG_TEMP_SIZE 3 
-#endif
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-//add for stop charging if temp < MIN_CHARGE_TEMPERATURE 
-#define BAT_LOW_TEMP_PROTECT_ENABLE
-#endif
 
 /* charger error check */
 #define V_CHARGER_ENABLE 0				/* 1:ON , 0:OFF	*/
@@ -112,32 +60,10 @@
 #define V_CHARGER_MIN 4400				/* 4.4 V	*/
 
 /* Tracking TIME */
-#if defined(CONFIG_FIH_PROJECT_NE1)
-//modify Tracking time.
-#define ONEHUNDRED_PERCENT_TRACKING_TIME	70	// 10 second
-#define NPERCENT_TRACKING_TIME	   			60	// 20 second
-#define SYNC_TO_REAL_TRACKING_TIME  		70	// 60 second
-#define V_0PERCENT_TRACKING					3550 //3450mV
-#else
 #define ONEHUNDRED_PERCENT_TRACKING_TIME	10	/* 10 second	*/
 #define NPERCENT_TRACKING_TIME 20	/* 20 second	*/
 #define SYNC_TO_REAL_TRACKING_TIME 60	/* 60 second	*/
-#define V_0PERCENT_TRACKING							3450 /*3450mV	*/
-#endif
-
-#if defined(CONFIG_FIH_PROJECT_NE1)
-/*add for battery voltage too low*/
-#define SYSTEM_SHUTDOWN_VOLTAGE             3300
-#define SYSTEM_SHUTDOWN_VOLTAGE_LOW_TEMP    3000
-#define NPERCENT_TRACKING_SYSTEM_OFF        4
-#define NPERCENT_TRACKING_SYSTEM_SHUTDOWN   2
-
-//add for tracking use zcv
-#define V_0PERCENT_ZCV_TRACKING_START       15
-#define V_0PERCENT_ZCV_TRACKING_SECOND      10
-#define V_0PERCENT_ZCV_TRACKING_THIRD       5
-#define V_0PERCENT_ZCV_TRACKING_END         2
-#endif
+#define V_0PERCENT_TRACKING							3420 /*3450mV	*/
 
 /* Battery Notify */
 #define BATTERY_NOTIFY_CASE_0001_VCHARGER
@@ -149,33 +75,11 @@
 */
 /* High battery support */
 /*#define HIGH_BATTERY_VOLTAGE_SUPPORT*/
-#if defined(CONFIG_FIH_PROJECT_FRT) || defined(CONFIG_FIH_PROJECT_NE1)
-//modify for E1 High voltage battery.
-#ifndef BATTERY_ZL3
-#define HIGH_BATTERY_VOLTAGE_SUPPORT
-#endif
-#endif
-#if defined(CONFIG_FIH_PROJECT_NE1)
-#ifdef HIGH_BATTERY_VOLTAGE_SUPPORT
-#define BATTERY_MAX_VOLTAGE 4400
-/* add for value of CV is 4400, 40mv is margin.
-	(E1 battery value of voltage is 4400).
-   It is that resolve charging don't terminor, when system consumption too high.
-*/
-#define BATTERY_JUDGE_FULL_VOLTAGE_E1 (4400 - 40)
-#define BATTERY_CV_VOLTAGE_E1	4400
-//add end
-#else
-//add for ZL3
-#define BATTERY_JUDGE_FULL_VOLTAGE_E1 (4200 - 40)
-#define BATTERY_CV_VOLTAGE_E1	4200
-#define BATTERY_MAX_VOLTAGE 4200
-#endif
 
-//Modify 200->100 for Nokia
-#define BATTERY_DROP_OFFSET 100
-//when Vbat>4.0V,value of SP change. 
-#define SPECIAL_CHARGING_VOLTAGE 4000
+#define BAT_OVER_SOC_RECHARGE
+#if defined(BAT_OVER_SOC_RECHARGE)
+#define MAX_CHARGE_SOC	80
+#define OVER_SOC_RECHARGE_PERCENT	60
 #endif
 
 /* JEITA parameter */
@@ -185,7 +89,7 @@
 #ifdef HIGH_BATTERY_VOLTAGE_SUPPORT
 #define JEITA_TEMP_ABOVE_POS_60_CV_VOLTAGE		BATTERY_VOLT_04_240000_V
 #define JEITA_TEMP_POS_45_TO_POS_60_CV_VOLTAGE		BATTERY_VOLT_04_240000_V
-#define JEITA_TEMP_POS_10_TO_POS_45_CV_VOLTAGE		BATTERY_VOLT_04_340000_V
+#define JEITA_TEMP_POS_10_TO_POS_45_CV_VOLTAGE		BATTERY_VOLT_04_400000_V
 #define JEITA_TEMP_POS_0_TO_POS_10_CV_VOLTAGE		BATTERY_VOLT_04_240000_V
 #define JEITA_TEMP_NEG_10_TO_POS_0_CV_VOLTAGE		BATTERY_VOLT_04_040000_V
 #define JEITA_TEMP_BELOW_NEG_10_CV_VOLTAGE		BATTERY_VOLT_04_040000_V
@@ -211,34 +115,6 @@
 
 /* For CV_E1_INTERNAL */
 #define CV_E1_INTERNAL
-
-#if defined(CONFIG_FIH_PROJECT_FRT)
-/* Support PSE test */
-#define FIH_CHARGE_PSE
-#endif
-
-#if defined(CONFIG_FIH_PROJECT_NE1)
-/*
- add for Different temperatures corresponding to respective 
- voltages and current.
-*/
-#define FIH_CHARG_TEMP_CURR_CTRL
-#ifdef FIH_CHARG_TEMP_CURR_CTRL
-#define CHARG_TEMP_LEVEL_1  15  //Should higher than MIN_CHARGE_TEMPERATURE
-#define AC_CHARG_CURR_TEMP_LEVEL_1  CHARGE_CURRENT_650_00_MA
-#define CHARG_VOLTAGE_TEMP_LEVEL_1  BATTERY_VOLT_04_400000_V
-
-#define CHARG_TEMP_LEVEL_2  45  //Should higher than MIN_CHARGE_TEMPERATURE
-//#define AC_CHARG_CURR_TEMP_LEVEL_2  CHARGE_CURRENT_1150_00_MA
-#define AC_CHARG_CURR_TEMP_LEVEL_2  CHARGE_CURRENT_650_00_MA
-#define CHARG_VOLTAGE_TEMP_LEVEL_2  BATTERY_VOLT_04_100000_V
-#endif
-
-//add for show charger top off value.
-#define CHARGE_SAFE_VOLTAGE     4400	//4340
-#define CHARGE_NORMAL_VOLTAGE   4200
-#endif
-
 
 /* Disable Battery check for HQA */
 #ifdef CONFIG_MTK_DISABLE_POWER_ON_OFF_VOLTAGE_LIMITATION

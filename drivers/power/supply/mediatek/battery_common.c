@@ -196,6 +196,11 @@ static unsigned int V_0Percent_Tracking = V_0PERCENT_TRACKING;
 
 struct battery_custom_data batt_cust_data;
 
+#if defined(BAT_OVER_SOC_RECHARGE) 	
+unsigned int g_batt_soc_status = SOC_NORMAL;	
+kal_bool g_battery_test_status = KAL_FALSE;	
+int g_battery_percent = 50;	
+#endif	
 /*
  * Integrate with NVRAM
  */
@@ -2655,30 +2660,67 @@ static void mt_battery_notify_ICharging_check(void)
 static void mt_battery_notify_VBatTemp_check(void)
 {
 #if defined(BATTERY_NOTIFY_CASE_0002_VBATTEMP)
-
+//LC---qindh---20151101---modify for runin BAT_OVER_SOC_RECHARGE---start
+#if 0
 	if (BMT_status.temperature >= batt_cust_data.max_charge_temperature) {
 		g_BatteryNotifyCode |= 0x0002;
 		battery_log(BAT_LOG_CRTI, "[BATTERY] bat_temp(%d) out of range(too high)\n",
-			    BMT_status.temperature);
+				    BMT_status.temperature);
 	}
+#else
+	if((BMT_status.temperature >= batt_cust_data.max_charge_temperature)&&(BMT_status.charger_exist == KAL_TRUE)) {
+		#if defined(BAT_OVER_SOC_RECHARGE)
+		if (g_battery_test_status == KAL_FALSE)
+			g_BatteryNotifyCode |= 0x0002;
+		else
+			g_BatteryNotifyCode &= ~(0x0002);
+		#else
+		g_BatteryNotifyCode |= 0x0002;
+		#endif
+		battery_log(BAT_LOG_CRTI, "[BATTERY] bat_temp(%d) out of charge range(too high)\n", BMT_status.temperature);		
+	}
+
+	if(BMT_status.temperature >= BAT_HIGH_TEMPERATURE) {
+		#if defined(BAT_OVER_SOC_RECHARGE)
+		if (g_battery_test_status == KAL_FALSE)
+			g_BatteryNotifyCode |= 0x0002;
+		else
+			g_BatteryNotifyCode &= ~(0x0002);
+		#else
+		g_BatteryNotifyCode |= 0x0002;
+		#endif
+		battery_log(BAT_LOG_CRTI, "[BATTERY] bat_temp(%d) out of range(too high)\n", BMT_status.temperature);		
+    	}
+#endif
+///LC---qindh---20151101---modify for runin BAT_OVER_SOC_RECHARGE---end
+
 #if defined(CONFIG_MTK_JEITA_STANDARD_SUPPORT)
 	else if (BMT_status.temperature < TEMP_NEG_10_THRESHOLD) {
 		g_BatteryNotifyCode |= 0x0020;
 		battery_log(BAT_LOG_CRTI, "[BATTERY] bat_temp(%d) out of range(too low)\n",
-			    BMT_status.temperature);
+				    BMT_status.temperature);
 	}
 #else
 #ifdef BAT_LOW_TEMP_PROTECT_ENABLE
-	else if (BMT_status.temperature < MIN_CHARGE_TEMPERATURE) {
+///LC---qindh---20151101---modify for runin BAT_OVER_SOC_RECHARGE---end
+	else if (BMT_status.temperature <= batt_cust_data.min_charge_temperature) {
+		#if defined(BAT_OVER_SOC_RECHARGE)
+		if (g_battery_test_status == KAL_FALSE)
+			g_BatteryNotifyCode |= 0x0020;
+		else
+			g_BatteryNotifyCode &= ~(0x0020);
+		#else
 		g_BatteryNotifyCode |= 0x0020;
+		#endif
+///LC---qindh---20151101---modify for runin BAT_OVER_SOC_RECHARGE---end
 		battery_log(BAT_LOG_CRTI, "[BATTERY] bat_temp(%d) out of range(too low)\n",
-			    BMT_status.temperature);
+				    BMT_status.temperature);
 	}
 #endif
 #endif
 
 	battery_log(BAT_LOG_FULL, "[BATTERY] BATTERY_NOTIFY_CASE_0002_VBATTEMP (%x)\n",
-		    g_BatteryNotifyCode);
+			    g_BatteryNotifyCode);
 
 #endif
 }

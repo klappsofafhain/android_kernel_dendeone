@@ -80,9 +80,6 @@ extern bool gDisableGM;
  ****************************************************************************/
 #define CALL_IDLE (0)
 #define CALL_ACTIVE (1)
-#if defined(CONFIG_FIH_PROJECT_FRT)
-#define CALL_VIDEO (2)
-#endif
 
 /*****************************************************************************
  *  Enum
@@ -171,6 +168,20 @@ typedef enum {
 	TEMP_POS_HIGH
 } batt_temp_state_enum;
 
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE start
+#if defined(BAT_OVER_SOC_RECHARGE) 
+/*****************************************************************************
+* Normal battery percent state 
+****************************************************************************/
+typedef enum
+{
+	SOC_LOW = 0,
+	SOC_NORMAL,
+	SOC_HIGH
+}batt_soc_state_enum;
+#endif
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE end
+
 #ifndef BATTERY_BOOL
 #define BATTERY_BOOL
 typedef enum {
@@ -191,41 +202,6 @@ typedef unsigned char  BOOL;
   #define TRUE  (1)
 #endif
 
-#if defined(CONFIG_FIH_PROJECT_FRT)
-/*****************************************************************************
- *  OEM PSE
- ****************************************************************************/
-#define	MODE_NUM	7
-#define	CONTENT_NUM	15
-
-typedef enum {
-	POWER_OFF = 0,
-	NO_CHARGE2,
-	HOT_CHARGE,
-	NORMAL_PHASE2,
-	NORMAL_PHASE1,
-	COLD_CHARGE,
-	NO_CHARGE1,
-} pse_mode;
-
-typedef enum {
-	TEMP_L = 0,
-	TEMP_H,
-	CHARGE_MODE,
-	CHARGE_CUR,
-	CHARGE_CUR_TALK,
-	CHARGE_CUR_VIDEO,
-	STOP_VOL,
-	STOP_VOL_TALK,
-	STOP_VOL_VIDEO,
-	RECHARGE_VOL,
-	RECHARGE_VOL_TALK,
-	RECHARGE_VOL_VIDEO,
-	CC2CV_VOL,
-	CHANGE_TEMP_L,
-	CHANGE_TEMP_H,
-} pse_col;
-#endif
 
 
 /*****************************************************************************
@@ -259,10 +235,6 @@ typedef struct {
 	unsigned int nPercent_ZCV;
 	unsigned int nPrecent_UI_SOC_check_point;
 	unsigned int ZCV;
-#if defined(CONFIG_FIH_PROJECT_FRT)
-	unsigned int charge_mode;
-	signed int temperature_pse;
-#endif
 } PMU_ChargerStruct;
 
 struct battery_custom_data {
@@ -370,11 +342,7 @@ extern struct battery_custom_data batt_cust_data;
 extern CHARGING_CONTROL battery_charging_control;
 extern kal_bool g_ftm_battery_flag;
 extern int charging_level_data[1];
-#if defined(CONFIG_FIH_PROJECT_FRT)
-extern unsigned int g_call_state;
-#else
 extern kal_bool g_call_state;
-#endif
 extern kal_bool g_charging_full_reset_bat_meter;
 #if defined(CONFIG_MTK_PUMP_EXPRESS_SUPPORT)
 extern kal_bool ta_check_chr_type;
@@ -472,3 +440,4 @@ extern void mt_usb_disconnect(void);
 
 
 #endif				/* #ifndef BATTERY_COMMON_H */
+

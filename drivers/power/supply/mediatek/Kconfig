@@ -13,12 +13,6 @@ config MTK_SMART_BATTERY
 	  It also includes Mediatek gas gauge.
 
 
-config FIH_PSE_TEST
-	tristate "FIH PSE TEST"
-	help
-	  Check this to support FIH Test.
-	default n
-
 config POWER_EXT
 	tristate "MediaTek Power Ext"
 	default n
@@ -69,15 +63,15 @@ config MTK_BQ24160_SUPPORT
 	  Set to Yes if BQ24160 is used.
 
 
-config MTK_BQ24196_SUPPORT
-	bool "MediaTek Battery driver for TI BQ24196"
+config MTK_BQ24261_SUPPORT
+	bool "MediaTek Battery driver for TI BQ24261"
 	default n
 	help
 	  BQ24196 charger IC support
-	  This is to enable MediaTek supports to BQ24196.
+	  This is to enable MediaTek supports to BQ24261.
 	  It depends on config MTK_SMART_BATTERY
 	  and config MTK_SWCHR_SUPPORT
-	  Set to Yes if BQ24196 is used.
+	  Set to Yes if BQ24261 is used.
 
 
 config MTK_BQ24296_SUPPORT

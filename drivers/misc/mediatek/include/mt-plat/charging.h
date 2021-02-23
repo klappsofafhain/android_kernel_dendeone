@@ -51,10 +51,9 @@
 #ifndef CHARGING_H
 #define CHARGING_H
 
-#ifndef CONFIG_ARCH_MT8173
+#ifndef CONFIG_MACH_MT8173
 #include <mach/mt_charging.h>
 #endif
-#include <linux/types.h>
 
 /* ============================================================ */
 /* define */
@@ -113,11 +112,6 @@ typedef enum {
 	CHARGING_CMD_GET_CSDAC_FALL_FLAG,
 	CHARGING_CMD_SET_TA_CURRENT_PATTERN,
 	CHARGING_CMD_SET_ERROR_STATE,
-#if defined(CONFIG_FIH_PROJECT_NE1)
-	CHARGING_CMD_SET_SCV, // add for DPM.
-	CHARGING_CMD_GET_V_SAFE, //
-	CHARGING_CMD_GET_CHARGING_ENABLE, //
-#endif
 	CHARGING_CMD_DISO_INIT,
 	CHARGING_CMD_GET_DISO_STATE,
 	CHARGING_CMD_SET_VINDPM,
@@ -144,21 +138,11 @@ typedef enum {
 	CHARGING_CMD_GET_IBUS,
 	CHARGING_CMD_GET_VBUS,
 	CHARGING_CMD_RESET_DC_WATCH_DOG_TIMER,
+	CHARGING_CMD_ENABLE_CHR_TYPE_DET,
+	CHARGING_CMD_ENABLE_DISCHARGE,
 	CHARGING_CMD_RUN_AICL,
 	CHARGING_CMD_SET_IRCMP_RESISTOR,
 	CHARGING_CMD_SET_IRCMP_VOLT_CLAMP,
-	CHARGING_CMD_ENABLE_DC_VBUSOV,
-	CHARGING_CMD_SET_DC_VBUSOV,
-	CHARGING_CMD_ENABLE_DC_VBUSOC,
-	CHARGING_CMD_SET_DC_VBUSOC,
-	CHARGING_CMD_ENABLE_DC_VBATOV,
-	CHARGING_CMD_SET_DC_VBATOV,
-	CHARGING_CMD_GET_IS_DC_ENABLE,
-	CHARGING_CMD_SET_PEP20_EFFICIENCY_TABLE,
-	CHARGING_CMD_ENABLE_CHR_TYPE_DET,
-	CHARGING_CMD_ENABLE_DISCHARGE,
-	CHARGING_CMD_GET_TBUS,
-	CHARGING_CMD_GET_TBAT,
 	CHARGING_CMD_NUMBER
 } CHARGING_CTRL_CMD;
 
@@ -619,22 +603,11 @@ extern unsigned int g_bcct_flag;
 /* ============================================================ */
 /* External function */
 /* ============================================================ */
-#if defined(CONFIG_CHARGER_RT9458)
-//add
-#if defined(CONFIG_MTK_BQ24157_SUPPORT)
-extern kal_bool bq24157_chargin_hw_init_done;
-extern signed int bq24157_chr_control_interface(CHARGING_CTRL_CMD cmd, void *data);
-#endif
-extern signed int rt9458_chr_control_interface(CHARGING_CTRL_CMD cmd, void *data);
-#else
 extern signed int chr_control_interface(CHARGING_CTRL_CMD cmd, void *data);
-#endif
-
 extern unsigned int upmu_get_reg_value(unsigned int reg);
 extern void Charger_Detect_Init(void);
 extern void Charger_Detect_Release(void);
 extern int hw_charging_get_charger_type(void);
-extern void hw_bc11_dcd_release(void) __attribute__((weak));
 extern void mt_power_off(void);
 extern unsigned int mt6311_get_chip_id(void);
 extern int is_mt6311_exist(void);
@@ -642,8 +615,6 @@ extern int is_mt6311_sw_ready(void);
 
 extern void hw_charging_enable_dp_voltage(int ison);
 
-/* For RT5735A SDA low workaround */
-extern void battery_disable_batfet(void);
 
 /* switch charger */
 extern void switch_charger_set_vindpm(unsigned int chr_v);
@@ -673,15 +644,8 @@ extern int mtk_chr_get_ibat(unsigned int *ibat);
 extern int mtk_chr_get_vbus(unsigned int *vbus);
 extern int mtk_chr_get_aicr(unsigned int *aicr);
 extern int mtk_chr_is_charger_exist(unsigned char *exist);
-extern int mtk_chr_enable_power_path(unsigned char en);
+extern int mtk_chr_enable_direct_charge(unsigned char charging_enable);
 extern int mtk_chr_enable_charge(unsigned char charging_enable);
 extern int mtk_chr_reset_aicr_upper_bound(void);
-extern int mtk_chr_enable_chr_type_det(unsigned char en);
-extern int mtk_chr_pd_enable_power_path(unsigned char enable);
-extern int mtk_chr_enable_discharge(bool enable);
-extern int mtk_chr_enable_hv_charging(bool en);
-extern bool mtk_chr_is_hv_charging_enable(void);
-extern int mtk_chr_enable_kpoc_shutdown(bool en);
-extern bool mtk_chr_is_kpoc_shutdown_enable(void);
 
 #endif	/* #ifndef _CHARGING_H */

@@ -383,9 +383,6 @@ extern signed int battery_meter_get_battery_current(void);
 extern kal_bool battery_meter_get_battery_current_sign(void);
 extern signed int battery_meter_get_car(void);
 extern signed int battery_meter_get_battery_temperature(void);
-#if defined(CONFIG_FIH_PROJECT_FRT)
-extern signed int battery_meter_get_battery_temperature_pse(void);
-#endif
 extern signed int battery_meter_get_charger_voltage(void);
 extern signed int battery_meter_get_battery_percentage(void);
 extern signed int battery_meter_initial(void);
