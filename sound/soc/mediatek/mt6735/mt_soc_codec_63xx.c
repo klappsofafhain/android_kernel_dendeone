@@ -98,15 +98,58 @@
 #include "AudDrv_Common_func.h"
 #include "AudDrv_Gpio.h"
 #include "mt_soc_codec_63xx.h"
-
 #include <mt-plat/mt_gpio.h>
 #include "mach/gpio_const.h"
-#define GPIO_AUDIO_SEL         (GPIO4 | 0x80000000)
-#define GPIO_AUDIO_SEL_M_GPIO   GPIO_MODE_00
 
-/* BBS Log */
-#define BBOX_CODEC_PROBE_FAIL  do {printk("BBox;%s: Audio codec probe failure\n", __func__); printk("BBox::UEC;2::3\n");} while(0)
-
+#define accdet_earphone_pinread
+#ifndef accdet_earphone_pinread
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <asm-generic/gpio.h>
+#else
+#include <linux/string.h> 
+#include <linux/wait.h> 
+//#include <linux/platform_device.h> 
+#include <linux/gpio.h> 
+#include <linux/pinctrl/consumer.h> 
+#include <linux/of_gpio.h> 
+#include <asm-generic/gpio.h> 
+static unsigned int accdet_gpio_44_pin;
+int temp_value;			
+int accdet_get_readID_pin(void)
+{
+	int accdet_temp_value=0;
+	static struct device_node *node;
+	int ret;
+	node = of_find_compatible_node(NULL, NULL, "mediatek,mt_soc_codec_63xx");
+	accdet_gpio_44_pin = of_get_named_gpio(node, "ampl_gpio", 0);
+	ret = gpio_request(accdet_gpio_44_pin, "ampl_gpio");
+	if (ret < 0)
+	{
+	//pr_warn("[mt_soc_codec_63xx][ERROR] 1 Unable to request accdet_gpio_44_pin ret=%d,accdet_gpio_44_pin=%d\n",ret,accdet_gpio_44_pin);
+		//error,free,request
+		gpio_free(accdet_gpio_44_pin);
+		ret = gpio_request(accdet_gpio_44_pin, "ampl_gpio");
+		if (ret < 0){
+			pr_warn("[mt_soc_codec_63xx.c][ERROR] 2Unable to request accdet_gpio_44_pin Twice\n");//add log,two error
+		}
+		else{
+			//gpio_direction_input(accdet_gpio_44_pin);
+			///gpio_direction_output(accdet_gpio_44_pin,1);
+			accdet_temp_value=gpio_get_value(accdet_gpio_44_pin);
+			//pr_warn("[mt_soc_codec_63xx.c] Twice OK accdet_temp_value=%d,ret=%d\n",accdet_temp_value,ret);//add log , two ok
+		}
+	}
+	else
+	{
+		//pr_err("4[mt_soc_codec_63xx.c][OK] Request GPIO_READ_ID_PIN ONCE OK\n");
+		gpio_direction_input(accdet_gpio_44_pin);
+		accdet_temp_value=gpio_get_value(accdet_gpio_44_pin);
+	}
+//pr_err("4[mt_soc_codec_63xx.c] accdet_temp_value=%d\n",accdet_temp_value);
+return accdet_temp_value;
+}
+#endif
 /* #define AW8736_MODE_CTRL // AW8736 PA output power mode control */
 
 /* static function declaration */
@@ -1706,12 +1749,53 @@ static int Audio_AmpL_Set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_val
 		Audio_Amp_Change(AUDIO_ANALOG_CHANNELS_LEFT1, true);
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETL] =
 		    ucontrol->value.integer.value[0];
+		    #ifndef accdet_earphone_pinread
+		{
+			int ampl_gpio;
+			struct device_node *node;
+			node = of_find_compatible_node(NULL, NULL, "mediatek,mt_soc_codec_63xx");
+			ampl_gpio = of_get_named_gpio(node, "ampl_gpio", 0);	
+			gpio_direction_input(ampl_gpio);
+			if(gpio_get_value(ampl_gpio) == 0) {
+				msleep(100);
+				gpio_direction_output(ampl_gpio, 1);
+			}
+	    	}
+#else		
+	temp_value=accdet_get_readID_pin();
+	pr_warn("Audio_AmpL_Set  on--- temp_value=%d\n",temp_value);
+	if(temp_value== 0) {
+	msleep(100);
+	gpio_direction_output(accdet_gpio_44_pin, 1);
+	}
+#endif
+			
 	} else if ((ucontrol->value.integer.value[0] == false)
 		   && (mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETL] ==
 		       true)) {
+#ifdef accdet_earphone_pinread
+		temp_value=accdet_get_readID_pin();
+		pr_warn("Audio_AmpL_Set  off--- ,temp_value=%d\n",temp_value);
+		if(temp_value== 1) {
+		gpio_direction_output(accdet_gpio_44_pin, 0);
+		msleep(100);		}
+#endif
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETL] =
 		    ucontrol->value.integer.value[0];
 		Audio_Amp_Change(AUDIO_ANALOG_CHANNELS_LEFT1, false);
+#ifndef accdet_earphone_pinread
+		{
+			int ampl_gpio;
+			struct device_node *node;
+			node = of_find_compatible_node(NULL, NULL, "mediatek,mt_soc_codec_63xx");
+			ampl_gpio = of_get_named_gpio(node, "ampl_gpio", 0);	
+			gpio_direction_input(ampl_gpio);
+			if(gpio_get_value(ampl_gpio) == 1) {
+				msleep(100);
+				gpio_direction_output(ampl_gpio, 0);
+			}
+	    	}
+#endif	
 	}
 	mutex_unlock(&Ana_Ctrl_Mutex);
 	return 0;
@@ -1732,9 +1816,26 @@ static int Audio_AmpR_Set(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_val
 		Audio_Amp_Change(AUDIO_ANALOG_CHANNELS_RIGHT1, true);
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETR] =
 		    ucontrol->value.integer.value[0];
-	} else if ((ucontrol->value.integer.value[0] == false)
+		    #ifdef accdet_earphone_pinread		
+	temp_value=accdet_get_readID_pin();
+	pr_warn("Audio_AmpR_Set  on--- ,temp_value=%d\n",temp_value);
+	if(temp_value== 1) {
+	msleep(100);
+	gpio_direction_output(accdet_gpio_44_pin, 1);
+	}
+#endif
+} else if ((ucontrol->value.integer.value[0] == false)
 		   && (mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETR] ==
 		       true)) {
+#ifdef accdet_earphone_pinread	
+		temp_value=accdet_get_readID_pin();
+		pr_warn("Audio_AmpR_Set  off--- ,temp_value=%d\n",temp_value);
+		if(temp_value== 1) {
+		gpio_direction_output(accdet_gpio_44_pin, 0);
+		msleep(100);
+		}
+#endif
+	
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_HEADSETR] =
 		    ucontrol->value.integer.value[0];
 		Audio_Amp_Change(AUDIO_ANALOG_CHANNELS_RIGHT1, false);
@@ -1999,25 +2100,17 @@ static void Ext_Speaker_Amp_Change(bool enable)
 
 	ret = GetGPIO_Info(5, &pin_extspkamp, &pin_mode_extspkamp);
 	if (ret < 0) {
-		pr_warn("Ext_Speaker_Amp_Change GetGPIO_Info FAIL!!!\n");
+		pr_err("Ext_Speaker_Amp_Change GetGPIO_Info FAIL!!!\n");
 		return;
 	}
 #endif
 	if (enable) {
 		pr_debug("Ext_Speaker_Amp_Change ON+\n");
-		
-		if (strncmp("NE1", CONFIG_ARCH_MTK_PROJECT, 3) == 0) {
-			// Beging,
-			pinctrl_select_state(pinctrl78, extPAen_High);
-			pr_warn("Ext_Speaker_Amp_Change enable\n");
-			// End,
-		}
-		
 #ifndef CONFIG_MTK_SPEAKER
 #if defined(CONFIG_MTK_LEGACY)
 
 		ret = GetGPIO_Info(10, &pin_extspkamp_2, &pin_mode_extspkamp_2);
-		pr_debug("Ext_Speaker_Amp_Change ON set GPIO\n");
+		pr_warn("Ext_Speaker_Amp_Change ON set GPIO\n");
 		mt_set_gpio_mode(pin_extspkamp, GPIO_MODE_00);	/* GPIO117: DPI_D3, mode 0 */
 		mt_set_gpio_pull_enable(pin_extspkamp, GPIO_PULL_ENABLE);
 		mt_set_gpio_dir(pin_extspkamp, GPIO_DIR_OUT);	/* output */
@@ -2053,31 +2146,9 @@ static void Ext_Speaker_Amp_Change(bool enable)
 #endif /*CONFIG_MTK_LEGACY*/
 		msleep(SPK_WARM_UP_TIME);
 #endif
-		if (strncmp("gobo", CONFIG_ARCH_MTK_PROJECT, 4) == 0) {/* for gobo y33 */
-			mt_set_gpio_mode(GPIO_AUDIO_SEL, GPIO_AUDIO_SEL_M_GPIO);
-			mt_set_gpio_dir(GPIO_AUDIO_SEL, GPIO_DIR_OUT);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ONE);
-			udelay(2);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ZERO);
-			udelay(2);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ONE);
-			udelay(2);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ZERO);
-			udelay(2);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ONE);
-			mdelay(50);
-		}
 		pr_debug("Ext_Speaker_Amp_Change ON-\n");
 	} else {
 		pr_debug("Ext_Speaker_Amp_Change OFF+\n");
-
-		if (strncmp("NE1", CONFIG_ARCH_MTK_PROJECT, 3) == 0) {
-			// Beging,
-			pinctrl_select_state(pinctrl78, extPAen_Low);
-			pr_warn("Ext_Speaker_Amp_Change disable\n");
-			// End,
-		}
-		
 #ifndef CONFIG_MTK_SPEAKER
 #if defined(CONFIG_MTK_LEGACY)
 		ret = GetGPIO_Info(10, &pin_extspkamp_2, &pin_mode_extspkamp_2);
@@ -2094,11 +2165,6 @@ static void Ext_Speaker_Amp_Change(bool enable)
 #endif
 		udelay(500);
 #endif
-		if (strncmp("gobo", CONFIG_ARCH_MTK_PROJECT, 4) == 0) {/* for gobo y33 */
-			mt_set_gpio_mode(GPIO_AUDIO_SEL, GPIO_AUDIO_SEL_M_GPIO);
-			mt_set_gpio_dir(GPIO_AUDIO_SEL, GPIO_DIR_OUT);
-			mt_set_gpio_out(GPIO_AUDIO_SEL, GPIO_OUT_ZERO);
-		}
 		pr_debug("Ext_Speaker_Amp_Change OFF-\n");
 	}
 #endif
@@ -2465,9 +2531,54 @@ static int Headset_Speaker_Amp_Set(struct snd_kcontrol *kcontrol,
 		Headset_Speaker_Amp_Change(true);
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_SPEAKER_HEADSET_R] =
 		    ucontrol->value.integer.value[0];
+	#ifndef accdet_earphone_pinread
+		{
+			int ampl_gpio;
+			struct device_node *node;
+			node = of_find_compatible_node(NULL, NULL, "mediatek,mt_soc_codec_63xx");
+			ampl_gpio = of_get_named_gpio(node, "ampl_gpio", 0);	
+			gpio_direction_input(ampl_gpio);
+
+			msleep(100);
+			if(gpio_get_value(ampl_gpio) == 0) {
+
+				gpio_direction_output(ampl_gpio, 1);
+			}
+	    	}
+#else
+		msleep(100);
+		temp_value=accdet_get_readID_pin();
+		pr_warn("Headset_Speaker_Amp_Get  on--- ,temp_value=%d\n",temp_value);
+		if(temp_value == 0) {
+		//msleep(100);
+		gpio_direction_output(accdet_gpio_44_pin, 1);
+		}
+#endif	
 	} else if ((ucontrol->value.integer.value[0] == false)
 		   && (mCodec_data->
 		       mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_SPEAKER_HEADSET_R] == true)) {
+#ifndef accdet_earphone_pinread	
+		{
+			int ampl_gpio;
+			struct device_node *node;
+			node = of_find_compatible_node(NULL, NULL, "mediatek,mt_soc_codec_63xx");
+			ampl_gpio = of_get_named_gpio(node, "ampl_gpio", 0);	
+			gpio_direction_input(ampl_gpio);
+			if(gpio_get_value(ampl_gpio) == 1) {
+				gpio_direction_output(ampl_gpio, 0);
+			}
+
+			msleep(100);
+	    	}
+#else
+		temp_value=accdet_get_readID_pin();
+		pr_warn("Headset_Speaker_Amp_Get  off--- ,temp_value=%d\n",temp_value);
+		if(temp_value == 1) {
+		gpio_direction_output(accdet_gpio_44_pin, 0);
+		//msleep(100);
+		}
+		msleep(100);
+#endif
 		mCodec_data->mAudio_Ana_DevicePower[AUDIO_ANALOG_DEVICE_OUT_SPEAKER_HEADSET_R] =
 		    ucontrol->value.integer.value[0];
 		Headset_Speaker_Amp_Change(false);

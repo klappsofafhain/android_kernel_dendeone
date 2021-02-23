@@ -74,8 +74,7 @@ extern struct platform_driver accdet_driver_func(void);	/*from accdet_drv.c*/
 extern struct headset_mode_settings *get_cust_headset_settings(void);
 extern struct headset_key_custom *get_headset_key_custom_setting(void);
 extern void accdet_create_attr_func(void);	/*from accdet_drv.c*/
-#if defined(CONFIG_TS3A225E_ACCDET)
-extern struct i2c_client *ts3a225e_i2c_client;
+#if defined(ACCDET_TS3A225E_PIN_SWAP)
 extern int ts3a225e_read_byte(unsigned char cmd, unsigned char *returnData);
 extern int ts3a225e_write_byte(unsigned char cmd, unsigned char writeData);
 #endif
@@ -87,6 +86,8 @@ void mt_accdet_pm_restore_noirq(void);
 long mt_accdet_unlocked_ioctl(unsigned int cmd, unsigned long arg);
 int mt_accdet_probe(struct platform_device *dev);
 int accdet_get_cable_type(void);
+/* just be called by audio module */
+int accdet_read_audio_res(unsigned int res_value);
 
 /****************************************************
 globle ACCDET variables
@@ -96,6 +97,8 @@ enum accdet_report_state {
 	NO_DEVICE = 0,
 	HEADSET_MIC = 1,
 	HEADSET_NO_MIC = 2,
+	HEADSET_FIVE_POLE = 3,
+	LINE_OUT_DEVICE = (1<<5),
 	/*HEADSET_ILEGAL = 3,*/
 	/*DOUBLE_CHECK_TV = 4*/
 };
@@ -105,6 +108,7 @@ enum accdet_status {
 	MIC_BIAS = 1,
 	/*DOUBLE_CHECK = 2,*/
 	HOOK_SWITCH = 2,
+	LINE_OUT = 3,
 	/*MIC_BIAS_ILLEGAL =3,*/
 	/*TV_OUT = 5,*/
 	STAND_BY = 4
@@ -138,6 +142,7 @@ struct four_key_threshold {
 };
 struct head_dts_data {
 	int mic_mode_vol;
+	unsigned int eint_level_pol;/* eintlevel polarity,8,high level;4, low level */
 	struct headset_mode_settings headset_debounce;
 	int accdet_plugout_debounce;
 	int accdet_mic_mode;
