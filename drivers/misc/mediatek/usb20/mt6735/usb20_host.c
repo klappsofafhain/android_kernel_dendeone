@@ -238,10 +238,6 @@ void _set_vbus(struct musb *musb, int is_on)
 	}
 }
 #else
-// 
-extern int otg_last_flag;
-extern unsigned short fih_hwid;
-
 void _set_vbus(struct musb *musb, int is_on)
 {
 	static int vbus_inited;
@@ -253,20 +249,12 @@ void _set_vbus(struct musb *musb, int is_on)
 
 	if (is_on && !vbus_on && vbus_inited) {
 		vbus_on = true;
-		otg_last_flag = 1;
 #ifdef CONFIG_MTK_FAN5405_SUPPORT
 		fan5405_set_opa_mode(1);
 		fan5405_set_otg_pl(1);
 		fan5405_set_otg_en(1);
-#elif defined(CONFIG_CHARGER_RT9458)
-	#ifdef CONFIG_MTK_BQ24157_SUPPORT
-	if (fih_hwid <= 0x113) {
-		bq24157_set_opa_mode(1);
-		bq24157_set_otg_pl(1);
-		bq24157_set_otg_en(1);
-	} else 
-	#endif
-		set_chr_enable_otg(1);//RT9458.
+#elif defined(CONFIG_MTK_BQ24261_SUPPORT)
+		bq24261_set_en_boost(1);
 #else
 		DBG(0, "**** Drive VBUS HIGH KS!!!!!\n");
 		pinctrl_select_state(pinctrl, pinctrl_drvvbus_high);
@@ -275,14 +263,8 @@ void _set_vbus(struct musb *musb, int is_on)
 #ifdef CONFIG_MTK_FAN5405_SUPPORT
 		fan5405_config_interface(0x01, 0x30, 0xff, 0x00);
 		fan5405_config_interface(0x02, 0x8e, 0xff, 0x00);
-#elif defined(CONFIG_CHARGER_RT9458)
-	#ifdef CONFIG_MTK_BQ24157_SUPPORT
-	if (fih_hwid <= 0x113) {
-		bq24157_reg_config_interface(0x01, 0x30);
-		bq24157_reg_config_interface(0x02, 0x8e);
-	} else 
-	#endif
-		set_chr_enable_otg(0);//RT9458.
+#elif defined(CONFIG_MTK_BQ24261_SUPPORT)
+		bq24261_set_en_boost(0);
 #else
 		DBG(0, "**** Drive VBUS LOW KS!!!!!\n");
 		pinctrl_select_state(pinctrl, pinctrl_drvvbus_low);
@@ -832,8 +814,7 @@ static irqreturn_t mt_usb_ext_iddig_int(int irq, void *dev_id)
 {
 	iddig_cnt++;
 
-	//iddig_req_host = !iddig_req_host;
-	iddig_req_host = 0;
+	iddig_req_host = !iddig_req_host;
 	DBG(0, "id pin assert, %s\n", iddig_req_host ?
 			"connect" : "disconnect");
 	queue_delayed_work(mtk_musb->st_wq, &mtk_musb->host_work,

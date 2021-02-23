@@ -96,24 +96,20 @@ extern bool usb20_check_vbus_on(void);
 extern bool usb_prepare_clock(bool enable);
 extern void usb_prepare_enable_clock(bool enable);
 
-//rt9458 OTG
-extern int set_chr_enable_otg(unsigned int enable);
-#ifdef CONFIG_MTK_BQ24157_SUPPORT
-extern void bq24157_set_opa_mode(unsigned int val);
-extern void bq24157_set_otg_pl(unsigned int val);
-extern void bq24157_set_otg_en(unsigned int val);
-extern unsigned int bq24157_reg_config_interface(unsigned char RegNum, unsigned char val);
-#endif
 /* switch charger API*/
+
 #ifdef CONFIG_MTK_FAN5405_SUPPORT
 extern void fan5405_set_opa_mode(u32 val);
 extern void fan5405_set_otg_pl(u32 val);
 extern void fan5405_set_otg_en(u32 val);
 extern u32 fan5405_config_interface(u8 RegNum, u8 val, u8 MASK, u8 SHIFT);
 #endif
+#ifdef CONFIG_MTK_BQ24261_SUPPORT
+extern void bq24261_set_en_boost(unsigned int val);
+#endif
 
 #ifndef CONFIG_MTK_CLKMGR
 extern struct clk *musb_clk;
 #endif
-
 #endif
+
