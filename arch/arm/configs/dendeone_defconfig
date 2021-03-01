@@ -4219,7 +4219,7 @@ CONFIG_SBITMAP=y
 
 #### aquaris a45/m45 custom configuration
 
-#low ram config
+#low ram config //disable this configuration for building kernel for 2GB devices//
 CONFIG_PSI=y
 CONFIG_MTK_GMO_RAM_OPTIMIZE=y
 CONFIG_MTK_ENABLE_GMO=y
