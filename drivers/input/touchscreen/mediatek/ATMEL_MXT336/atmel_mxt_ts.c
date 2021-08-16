@@ -6237,7 +6237,7 @@ printk("mxt swf99t15,line=%d\n",__LINE__);
 #endif
 
 #if 1 //defined(CONFIG_DUMMY_PARSE_DTS)
-		keymap[T15_T97_KEY][0] = KEY_MENU;
+		keymap[T15_T97_KEY][0] = KEY_APP_SWITCH;
 		keymap[T15_T97_KEY][1] = KEY_HOMEPAGE;
 		keymap[T15_T97_KEY][2] = KEY_BACK;
 		keymap[T93_KEY][0] = KEY_F20; 
