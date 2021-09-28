@@ -247,6 +247,9 @@ struct battery_meter_custom_data {
 
 	int trk_point_en;
 	int trk_point_thr;
+	int tracking_gap;
+	int trackingoffset;
+	int trackingen;
 
 
 	int min_charging_smooth_time;

@@ -577,7 +577,7 @@ static void __batt_meter_parse_table(const struct device_node *np,
 int __batt_meter_init_cust_data_from_dt(void)
 {
 	struct device_node *np;
-	int num = 0;
+	int num;
 	unsigned int idx, addr, val;
 
 	/* check customer setting */
@@ -1930,10 +1930,10 @@ void dod_init(void)
 	g_rtc_fg_soc = get_rtc_spare_fg_value();
 #endif
 
-
 #if defined(IS_BATTERY_REMOVE_BY_PMIC)
 	if (is_battery_remove_pmic() == 0 && (g_rtc_fg_soc != 0)
-		&& batt_meter_cust_data.vbat_remove_detection) {
+		//&& batt_meter_cust_data.vbat_remove_detection) { 
+		){ //LC--qindh--rm--for keep with 64bit
 		bm_print(BM_LOG_CRTI, "[FGADC]is_battery_remove()==0 , use rtc_fg_soc%d\n",
 			 g_rtc_fg_soc);
 		gFG_capacity_by_v = g_rtc_fg_soc;

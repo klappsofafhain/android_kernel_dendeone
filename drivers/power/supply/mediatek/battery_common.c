@@ -1559,6 +1559,57 @@ static ssize_t store_Charging_CallState(struct device *dev, struct device_attrib
 }
 
 static DEVICE_ATTR(Charging_CallState, 0664, show_Charging_CallState, store_Charging_CallState);
+////LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE start
+#if defined(BAT_OVER_SOC_RECHARGE)
+static ssize_t show_BatteryTestStatus(struct device *dev,struct device_attribute *attr, char *buf)
+{
+	battery_xlog_printk(BAT_LOG_CRTI, "[Battery] show_BatteryTestStatus : %x\n", g_battery_test_status);
+
+	return sprintf(buf, "%x\n", g_battery_test_status);
+}
+static ssize_t store_BatteryTestStatus(struct device *dev,struct device_attribute *attr, const char *buf, size_t size)
+{
+	char *pvalue = NULL;
+	unsigned int battery_test_status = 0;
+	battery_xlog_printk(BAT_LOG_CRTI, "[Battery] store_BatteryTestStatus\n");
+	
+	if(buf != NULL && size != 0)
+	{
+		battery_xlog_printk(BAT_LOG_CRTI, "[Battery] buf is %s and size is %d \n",buf,size);
+		battery_test_status = simple_strtoul(buf,&pvalue,16);
+		g_battery_test_status = battery_test_status;
+		battery_xlog_printk(BAT_LOG_CRTI, "[Battery] store code : %x \n",g_battery_test_status);
+	}
+	
+	return size;
+}
+static DEVICE_ATTR(BatteryTestStatus, 0664, show_BatteryTestStatus, store_BatteryTestStatus);
+
+static ssize_t show_BatteryPercent(struct device *dev,struct device_attribute *attr, char *buf)
+{
+	battery_xlog_printk(BAT_LOG_CRTI, "[Battery] show_BatteryPercent : %d\n", g_battery_percent);
+
+	return sprintf(buf, "%d\n", g_battery_percent);
+}
+static ssize_t store_BatteryPercent(struct device *dev,struct device_attribute *attr, const char *buf, size_t size)
+{
+	char *pvalue = NULL;
+	unsigned int battery_percent = 0;
+	battery_xlog_printk(BAT_LOG_CRTI, "[Battery] store_BatteryPercent\n");
+	
+	if(buf != NULL && size != 0)
+	{
+		battery_xlog_printk(BAT_LOG_CRTI, "[Battery] buf is %s and size is %d \n",buf,size);
+		battery_percent = simple_strtol(buf,&pvalue,10);
+		g_battery_percent = battery_percent;
+		battery_xlog_printk(BAT_LOG_CRTI, "[Battery] store code : %d \n",g_battery_percent);
+	}
+	
+	return size;
+}
+static DEVICE_ATTR(BatteryPercent, 0664, show_BatteryPercent, store_BatteryPercent);
+#endif
+////LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE end
 
 /* V_0Percent_Tracking */
 static ssize_t show_V_0Percent_Tracking(struct device *dev, struct device_attribute *attr,
@@ -2179,8 +2230,8 @@ PMU_STATUS do_batt_temp_state_machine(void)
 	if (BMT_status.temperature == batt_cust_data.err_charge_temperature)
 		return PMU_STATUS_FAIL;
 
-
-
+//LC---qindh---rm---20151101---for DEND-642
+	#if 0
 	if (batt_cust_data.bat_low_temp_protect_enable) {
 		if (BMT_status.temperature < batt_cust_data.min_charge_temperature) {
 			battery_log(BAT_LOG_CRTI,
@@ -2203,6 +2254,7 @@ PMU_STATUS do_batt_temp_state_machine(void)
 			}
 		}
 	}
+	#endif
 
 	if (BMT_status.temperature >= batt_cust_data.max_charge_temperature) {
 		battery_log(BAT_LOG_CRTI, "[BATTERY] Battery Over Temperature !!\n\r");
@@ -2226,6 +2278,54 @@ PMU_STATUS do_batt_temp_state_machine(void)
 	return PMU_STATUS_OK;
 }
 
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE start
+#if defined(BAT_OVER_SOC_RECHARGE)
+PMU_STATUS do_batt_soc_state_machine(void)
+{
+	PMU_STATUS status = PMU_STATUS_OK;
+
+	if (g_battery_test_status == KAL_TRUE)
+	{
+		if (BMT_status.UI_SOC >= MAX_CHARGE_SOC)
+		{
+			battery_xlog_printk(BAT_LOG_CRTI, "[BATTERY] Battery Over SOC !!\n\r");                
+			g_batt_soc_status = SOC_HIGH;
+			status = PMU_STATUS_FAIL;       
+		}
+		else if (g_batt_soc_status == SOC_HIGH)
+		{
+			if (BMT_status.UI_SOC <= OVER_SOC_RECHARGE_PERCENT)
+			{             
+				battery_xlog_printk(BAT_LOG_CRTI, "[BATTERY] Battery Temperature down from %d to %d(%d), allow charging!!\n\r", MAX_CHARGE_SOC,BMT_status.UI_SOC,OVER_SOC_RECHARGE_PERCENT); 
+				g_batt_soc_status = SOC_NORMAL;
+				BMT_status.bat_charging_state=CHR_PRE;
+				return PMU_STATUS_OK;
+			}
+			else
+			{
+				return PMU_STATUS_FAIL;
+			}
+		}
+		else
+		{
+			g_batt_soc_status = SOC_NORMAL;
+		}
+	}
+	else
+	{
+		if (g_batt_soc_status == SOC_HIGH)
+		{
+			battery_xlog_printk(BAT_LOG_CRTI, "[BATTERY] Battery restart charging  because runin is over !!\n\r");  
+			g_batt_soc_status = SOC_NORMAL;
+			BMT_status.bat_charging_state=CHR_PRE;
+			return PMU_STATUS_OK;
+		}
+	}
+
+	return status;
+}
+#endif
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE end
 
 unsigned long BAT_Get_Battery_Voltage(int polling_mode)
 {
@@ -2354,16 +2454,24 @@ void mt_battery_GetBatteryData(void)
 
 	bat_vol = battery_meter_get_battery_voltage(KAL_TRUE);
 	Vsense = battery_meter_get_VSense();
-	if (upmu_is_chr_det() == KAL_TRUE)
-		ICharging = battery_meter_get_charging_current();
-	else
+	if (upmu_is_chr_det() == KAL_TRUE) {
+		//ICharging = battery_meter_get_charging_current(); //LC--qindh--20151101 rm
+		//LC--qindh--20151101 add for get ICharging and charger_vol start
+                ICharging =  get_bat_charging_current_level(); 
+                ICharging =  ICharging/100;
+		charger_vol = battery_meter_get_charger_voltage();
+		//LC--qindh--20151101 add for get ICharging and charger_vol end
+	} else {
 		ICharging = 0;
+		charger_vol = 0;//LC--qindh--20151101 add
+	}
 
 
-	charger_vol = battery_meter_get_charger_voltage();
+	//charger_vol = battery_meter_get_charger_voltage(); //LC--qindh--20151101 rm 
 	temperature = battery_meter_get_battery_temperature();
 	temperatureV = battery_meter_get_tempV();
 	temperatureR = battery_meter_get_tempR(temperatureV);
+
 
 	if (bat_meter_timeout == KAL_TRUE || bat_spm_timeout == TRUE || fg_wake_up_bat == KAL_TRUE) {
 		SOC = battery_meter_get_battery_percentage();
@@ -2507,7 +2615,7 @@ static PMU_STATUS mt_battery_CheckChargerVoltage(void)
 			}
 		}
 #if !defined(CONFIG_MTK_DUAL_INPUT_CHARGER_SUPPORT)
-		if (BMT_status.charger_vol >= batt_cust_data.v_charger_max) {
+		if (BMT_status.charger_vol >= 5500) {//batt_cust_data.v_charger_max) {  //LC--qindh--modify--20151101
 #else
 		if (BMT_status.charger_vol >= v_charger_max) {
 #endif
@@ -2558,6 +2666,23 @@ static PMU_STATUS mt_battery_CheckCallState(void)
 }
 #endif
 
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE start
+#if defined(BAT_OVER_SOC_RECHARGE)
+static PMU_STATUS mt_battery_CheckBatterySOC(void)
+{	
+	PMU_STATUS status = PMU_STATUS_OK;
+
+	if (do_batt_soc_state_machine() == PMU_STATUS_FAIL)
+	{
+		battery_xlog_printk(BAT_LOG_CRTI, "[BATTERY] Batt SOC check : fail\n");
+		status = PMU_STATUS_FAIL;
+	}
+
+	return status;
+}
+#endif
+//LC--zbl--20151101 add for runin BAT_OVER_SOC_RECHARGE end
+
 static void mt_battery_CheckBatteryStatus(void)
 {
 	battery_log(BAT_LOG_FULL, "[mt_battery_CheckBatteryStatus] cmd_discharging=(%d)\n",
@@ -2594,6 +2719,20 @@ static void mt_battery_CheckBatteryStatus(void)
 		BMT_status.bat_charging_state = CHR_ERROR;
 		return;
 	}
+	//LC--qindh-20151101 add for runin BAT_OVER_SOC_RECHARGE start
+	#if defined(BAT_OVER_SOC_RECHARGE)
+	if(mt_battery_CheckBatterySOC() != PMU_STATUS_OK)
+	{
+		
+		//LC--qindh-20151206 add for runin BAT_OVER_SOC_RECHARGE start
+		static int charging_error = 1;
+                battery_charging_control(CHARGING_CMD_SET_ERROR_STATE, &charging_error);
+		//LC--qindh-20151206 add for runin BAT_OVER_SOC_RECHARGE end
+		BMT_status.bat_charging_state = CHR_ERROR;
+		return;                  
+	}
+	#endif
+	//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE end
 }
 
 
@@ -2897,7 +3036,7 @@ CHARGER_TYPE mt_charger_type_detection(void)
 	}
 #else
 #if !defined(CONFIG_MTK_DUAL_INPUT_CHARGER_SUPPORT)
-	if (BMT_status.charger_type == CHARGER_UNKNOWN) {
+	if (BMT_status.charger_type == CHARGER_UNKNOWN || BMT_status.charger_type == NONSTANDARD_CHARGER) {  //LC--qindh--modify--20151117--for detect charger type error
 #else
 	if ((BMT_status.charger_type == CHARGER_UNKNOWN) &&
 	    (DISO_data.diso_state.cur_vusb_state == DISO_ONLINE)) {
@@ -2982,6 +3121,11 @@ static void mt_battery_charger_detect_check(void)
 #endif
 			mt_charger_type_detection();
 
+//LC--qindh--modify--20151117--for detect charger type error--start
+			if (BMT_status.charger_type == NONSTANDARD_CHARGER)	
+				mt_charger_type_detection();
+//LC--qindh--modify--20151117--for detect charger type error--end
+
 			if ((BMT_status.charger_type == STANDARD_HOST)
 			    || (BMT_status.charger_type == CHARGING_HOST)) {
 				mt_usb_connect();
@@ -3016,6 +3160,7 @@ static void mt_battery_charger_detect_check(void)
 		BMT_status.CC_charging_time = 0;
 		BMT_status.TOPOFF_charging_time = 0;
 		BMT_status.POSTFULL_charging_time = 0;
+		BMT_status.charger_vol = 0;//LC--qindh--add-20151101
 
 		battery_log(BAT_LOG_CRTI, "[BAT_thread]Cable out \r\n");
 
@@ -4443,6 +4588,12 @@ static int battery_probe(struct platform_device *dev)
 		ret_device_file = device_create_file(&(dev->dev), &dev_attr_Charger_Type);
 		ret_device_file = device_create_file(&(dev->dev), &dev_attr_Pump_Express);
 		ret_device_file = device_create_file(&(dev->dev), &dev_attr_FG_daemon_disable);
+		//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE start
+#if defined(BAT_OVER_SOC_RECHARGE)
+		ret_device_file = device_create_file(&(dev->dev), &dev_attr_BatteryTestStatus);
+		ret_device_file = device_create_file(&(dev->dev), &dev_attr_BatteryPercent);
+#endif
+//LC--qindh--20151101 add for runin BAT_OVER_SOC_RECHARGE end
 	}
 
 	/* battery_meter_initial();      //move to mt_battery_GetBatteryData() to decrease booting time */
